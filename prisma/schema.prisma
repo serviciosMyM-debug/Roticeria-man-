@@ -164,18 +164,20 @@ model Customer {
 }
 
 model Order {
-  id              String        @id @default(cuid())
-  customerId      String
-  status          OrderStatus   @default(PENDING)
-  paymentMethod   PaymentMethod
-  subtotal        Decimal       @db.Decimal(10, 2)
-  total           Decimal       @db.Decimal(10, 2)
-  notes           String?
-  deliveryType    String
-  deliveryAddress String?
-  whatsappSent    Boolean       @default(false)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id               String        @id @default(cuid())
+  customerId       String
+  orderDateKey     String
+  dailyOrderNumber Int
+  status           OrderStatus   @default(PENDING)
+  paymentMethod    PaymentMethod
+  subtotal         Decimal       @db.Decimal(10, 2)
+  total            Decimal       @db.Decimal(10, 2)
+  notes            String?
+  deliveryType     String
+  deliveryAddress  String?
+  whatsappSent     Boolean       @default(false)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
   customer Customer  @relation(fields: [customerId], references: [id], onDelete: Restrict)
   items    OrderItem[]
@@ -184,6 +186,8 @@ model Order {
   @@index([createdAt])
   @@index([status])
   @@index([customerId])
+  @@index([orderDateKey])
+  @@unique([orderDateKey, dailyOrderNumber])
 }
 
 model OrderItem {

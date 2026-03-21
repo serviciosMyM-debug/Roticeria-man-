@@ -3,6 +3,10 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
+function formatDailyOrderNumber(value: number) {
+  return value.toString().padStart(3, "0");
+}
+
 export default async function AdminDashboardPage() {
   const [ordersCount, productsCount, lowStockCount, activeDailyMenu, lastOrders, openCash] =
     await Promise.all([
@@ -103,7 +107,9 @@ export default async function AdminDashboardPage() {
                   className="rounded-2xl border border-zinc-200 p-4"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="font-bold uppercase">Pedido {order.id.slice(0, 8)}</p>
+                    <p className="font-bold uppercase">
+                      Pedido {formatDailyOrderNumber(order.dailyOrderNumber)}
+                    </p>
                     <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-bold uppercase">
                       {order.status}
                     </span>

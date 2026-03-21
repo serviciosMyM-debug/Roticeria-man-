@@ -91,9 +91,22 @@ export async function POST(req: NextRequest) {
 
       const total = lines.reduce((acc, line) => acc + line.subtotal, 0);
 
+      const now = new Date();
+      const orderDateKey = getOrderDateKey(now);
+
+      const todayOrdersCount = await tx.order.count({
+        where: {
+          orderDateKey,
+        },
+      });
+
+      const dailyOrderNumber = todayOrdersCount + 1;
+
       const order = await tx.order.create({
         data: {
           customerId: customer.id,
+          orderDateKey,
+          dailyOrderNumber,
           status: OrderStatus.PENDING,
           paymentMethod: parsed.paymentMethod as PaymentMethod,
           subtotal: new Prisma.Decimal(total),
@@ -133,7 +146,7 @@ export async function POST(req: NextRequest) {
             productId: line.product.id,
             type: "SALE",
             quantity: -line.quantity,
-            note: `Descuento por pedido ${order.id}`,
+            note: `Descuento por pedido ${formatDailyOrderNumber(order.dailyOrderNumber)}`,
           },
         });
       }
@@ -141,9 +154,11 @@ export async function POST(req: NextRequest) {
       return { order, lines, total };
     });
 
+    const displayOrderNumber = formatDailyOrderNumber(result.order.dailyOrderNumber);
+
     const whatsappMessage = [
       "Hola! Quiero confirmar este pedido:",
-      `Pedido: ${result.order.id}`,
+      `Pedido: ${displayOrderNumber}`,
       `Cliente: ${parsed.name}`,
       `Teléfono: ${parsed.phone}`,
       `Entrega: ${
@@ -166,6 +181,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       orderId: result.order.id,
+      displayOrderNumber,
       total: result.total,
       whatsappMessage,
     });
@@ -242,4 +258,15 @@ function humanPaymentMethod(value: string) {
     default:
       return value;
   }
+}
+
+function getOrderDateKey(date: Date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function formatDailyOrderNumber(value: number) {
+  return value.toString().padStart(3, "0");
 }

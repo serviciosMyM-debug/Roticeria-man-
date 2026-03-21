@@ -2,6 +2,10 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
+function formatDailyOrderNumber(value: number) {
+  return value.toString().padStart(3, "0");
+}
+
 export default async function AdminPedidosPage() {
   const orders = await prisma.order.findMany({
     orderBy: {
@@ -46,7 +50,7 @@ export default async function AdminPedidosPage() {
               orders.map((order) => (
                 <tr key={order.id} className="border-t border-zinc-200">
                   <td className="p-4 font-semibold uppercase">
-                    {order.id.slice(0, 8)}
+                    {formatDailyOrderNumber(order.dailyOrderNumber)}
                   </td>
                   <td className="p-4">
                     <div>
