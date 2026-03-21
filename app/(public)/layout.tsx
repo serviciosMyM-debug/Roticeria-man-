@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { ReactNode } from "react";
 
+export const dynamic = "force-dynamic";
+
 export default async function PublicLayout({
   children,
 }: {
@@ -13,7 +15,7 @@ export default async function PublicLayout({
   const openingHours =
     settings?.openingHours || "Lunes a Sábado de 10:00 a 15:00 y 19:00 a 23:30";
   const address = settings?.address || "Av. Principal 123";
-  const whatsapp = settings?.whatsappNumber || "5490000000000";
+  const whatsapp = settings?.whatsappNumber || "5493416100044";
   const description =
     settings?.description || "Comida casera, rápida y lista para llevar.";
 

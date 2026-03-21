@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { revalidatePath } from "next/cache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -90,6 +91,13 @@ export async function PUT(req: NextRequest) {
         data: payload,
       });
     }
+
+    revalidatePath("/");
+    revalidatePath("/menu");
+    revalidatePath("/carrito");
+    revalidatePath("/pedido-especial");
+    revalidatePath("/admin");
+    revalidatePath("/admin/configuracion");
 
     return NextResponse.json({
       ok: true,
