@@ -25,6 +25,7 @@ function formatDailyOrderNumber(value?: number) {
 export default function AdminPedidosPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [deleteCandidateId, setDeleteCandidateId] = useState<string | null>(null);
   const { showToast } = useToast();
 
   async function loadOrders() {
@@ -90,9 +91,6 @@ export default function AdminPedidosPage() {
   }
 
   async function handleDelete(id: string) {
-    const ok = confirm("¿Seguro que querés eliminar este pedido?");
-    if (!ok) return;
-
     try {
       setLoadingId(id);
 
@@ -112,6 +110,7 @@ export default function AdminPedidosPage() {
         description: "El pedido fue eliminado correctamente.",
       });
 
+      setDeleteCandidateId(null);
       await loadOrders();
     } catch (error: any) {
       showToast({
@@ -156,57 +155,92 @@ export default function AdminPedidosPage() {
                 </td>
               </tr>
             ) : (
-              orders.map((order) => (
-                <tr key={order.id} className="border-t border-zinc-200 align-top">
-                  <td className="p-4 font-semibold uppercase">
-                    {formatDailyOrderNumber(order.dailyOrderNumber)}
-                  </td>
+              orders.map((order) => {
+                const isPending = order.status === "PENDING";
+                const isDelivered = order.status === "DELIVERED";
+                const isCancelled = order.status === "CANCELLED";
+                const isLoading = loadingId === order.id;
+                const askDelete = deleteCandidateId === order.id;
 
-                  <td className="p-4">
-                    <div>
-                      <p className="font-semibold">{order.customer.name}</p>
-                      <p className="text-zinc-500">{order.customer.phone}</p>
-                    </div>
-                  </td>
+                return (
+                  <tr key={order.id} className="border-t border-zinc-200 align-top">
+                    <td className="p-4 font-semibold uppercase">
+                      {formatDailyOrderNumber(order.dailyOrderNumber)}
+                    </td>
 
-                  <td className="p-4">{order.status}</td>
-                  <td className="p-4">{order.paymentMethod}</td>
-                  <td className="p-4">{order.deliveryType}</td>
-                  <td className="p-4">${Number(order.total).toFixed(2)}</td>
-                  <td className="p-4">{new Date(order.createdAt).toLocaleString()}</td>
+                    <td className="p-4">
+                      <div>
+                        <p className="font-semibold">{order.customer.name}</p>
+                        <p className="text-zinc-500">{order.customer.phone}</p>
+                      </div>
+                    </td>
 
-                  <td className="p-4">
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={loadingId === order.id}
-                        onClick={() => handleAction(order.id, "complete")}
-                        className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold uppercase text-white disabled:opacity-50"
-                      >
-                        Confirmar
-                      </button>
+                    <td className="p-4">{order.status}</td>
+                    <td className="p-4">{order.paymentMethod}</td>
+                    <td className="p-4">{order.deliveryType}</td>
+                    <td className="p-4">${Number(order.total).toFixed(2)}</td>
+                    <td className="p-4">{new Date(order.createdAt).toLocaleString()}</td>
 
-                      <button
-                        type="button"
-                        disabled={loadingId === order.id}
-                        onClick={() => handleAction(order.id, "cancel")}
-                        className="rounded-xl bg-amber-500 px-3 py-2 text-xs font-bold uppercase text-white disabled:opacity-50"
-                      >
-                        Cancelar
-                      </button>
+                    <td className="p-4">
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          disabled={!isPending || isLoading}
+                          onClick={() => handleAction(order.id, "complete")}
+                          className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold uppercase text-white disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          Confirmar
+                        </button>
 
-                      <button
-                        type="button"
-                        disabled={loadingId === order.id}
-                        onClick={() => handleDelete(order.id)}
-                        className="rounded-xl bg-red-600 px-3 py-2 text-xs font-bold uppercase text-white disabled:opacity-50"
-                      >
-                        Eliminar
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+                        <button
+                          type="button"
+                          disabled={!isPending || isLoading}
+                          onClick={() => handleAction(order.id, "cancel")}
+                          className="rounded-xl bg-amber-500 px-3 py-2 text-xs font-bold uppercase text-white disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          Cancelar
+                        </button>
+
+                        {!askDelete ? (
+                          <button
+                            type="button"
+                            disabled={isDelivered || isLoading}
+                            onClick={() => setDeleteCandidateId(order.id)}
+                            className="rounded-xl bg-red-600 px-3 py-2 text-xs font-bold uppercase text-white disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            Eliminar
+                          </button>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              disabled={isLoading}
+                              onClick={() => handleDelete(order.id)}
+                              className="rounded-xl bg-red-700 px-3 py-2 text-xs font-bold uppercase text-white"
+                            >
+                              Confirmar borrar
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={isLoading}
+                              onClick={() => setDeleteCandidateId(null)}
+                              className="rounded-xl border px-3 py-2 text-xs font-bold uppercase"
+                            >
+                              No borrar
+                            </button>
+                          </>
+                        )}
+                      </div>
+
+                      <div className="mt-2 text-xs text-zinc-500">
+                        {isDelivered && "Pedido ya confirmado"}
+                        {isCancelled && "Pedido cancelado"}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
