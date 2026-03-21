@@ -1,0 +1,47 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-brand-soft text-brand-black antialiased;
+}
+
+.container-app {
+  @apply mx-auto max-w-7xl px-4 sm:px-6 lg:px-8;
+}
+
+.section-title {
+  @apply text-3xl md:text-4xl font-black uppercase tracking-wide;
+}
+
+.card {
+  @apply rounded-3xl bg-white shadow-card;
+}
+
+.badge {
+  @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide;
+}
+
+.btn-primary {
+  @apply inline-flex items-center justify-center rounded-2xl bg-brand px-5 py-3 font-bold text-white transition hover:bg-brand-dark;
+}
+
+.btn-secondary {
+  @apply inline-flex items-center justify-center rounded-2xl border border-brand-black px-5 py-3 font-bold text-brand-black transition hover:bg-brand-black hover:text-white;
+}
+
+input, select, textarea {
+  @apply w-full rounded-2xl border border-zinc-300 bg-white px-4 py-3 outline-none ring-0 transition focus:border-brand;
+}
+
+table {
+  @apply w-full border-collapse;
+}
+
+th, td {
+  @apply border-b border-zinc-200 px-4 py-3 text-left;
+}

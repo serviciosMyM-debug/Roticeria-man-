@@ -1,0 +1,299 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OrderStatus {
+  PENDING
+  PREPARING
+  READY
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  TRANSFER
+  DEBIT
+  CREDIT
+}
+
+enum CashMovementType {
+  OPENING
+  SALE
+  INCOME
+  EXPENSE
+  CLOSING
+}
+
+enum SpecialOrderStatus {
+  PENDING
+  REVIEWED
+  APPROVED
+  REJECTED
+  COMPLETED
+}
+
+model Admin {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Settings {
+  id             String   @id @default(cuid())
+  businessName   String   @default("Mana")
+  heroTitle      String   @default("Comida rica, rápida y casera")
+  heroSubtitle   String   @default("Menú del día, viandas y rotisería lista para pedir")
+  whatsappNumber String   @default("5493416100044")
+  description    String   @default("Comida casera, rápida y lista para llevar.")
+  address        String   @default("Av. Principal 123")
+  openingHours   String   @default("Lunes a Sábado de 10:00 a 15:00 y 19:00 a 23:30")
+  instagramUrl   String?
+  facebookUrl    String?
+  logoUrl        String?
+  primaryColor   String   @default("#d97706")
+  secondaryColor String   @default("#111111")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Category {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  slug        String    @unique
+  description String?
+  products    Product[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Product {
+  id               String          @id @default(cuid())
+  name             String
+  slug             String          @unique
+  shortDescription String
+  description      String
+  price            Decimal         @db.Decimal(10, 2)
+  promoPrice       Decimal?        @db.Decimal(10, 2)
+  stock            Int             @default(0)
+  lowStockAlert    Int             @default(5)
+  imageUrl         String?
+  isActive         Boolean         @default(true)
+  isFeatured       Boolean         @default(false)
+  isPromo          Boolean         @default(false)
+  isDailyMenu      Boolean         @default(false)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  categoryId       String
+  category         Category        @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  orderItems       OrderItem[]
+  stockMovements   StockMovement[]
+  dailyMenuItems   DailyMenuItem[]
+
+  @@index([categoryId])
+  @@index([isFeatured, isActive])
+  @@index([stock])
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  name      String
+  content   String
+  rating    Int
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+}
+
+model DailyMenu {
+  id        String          @id @default(cuid())
+  date      DateTime
+  isActive  Boolean         @default(true)
+  title     String          @default("Menú del día")
+  startsAt  String          @default("10:00")
+  endsAt    String          @default("15:00")
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  items     DailyMenuItem[]
+
+  @@index([date, isActive])
+}
+
+model DailyMenuItem {
+  id          String    @id @default(cuid())
+  dailyMenuId String
+  productId   String?
+  name        String
+  description String
+  price       Decimal   @db.Decimal(10, 2)
+  imageUrl    String?
+  available   Boolean   @default(true)
+  isPopular   Boolean   @default(false)
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  dailyMenu   DailyMenu @relation(fields: [dailyMenuId], references: [id], onDelete: Cascade)
+  product     Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([dailyMenuId])
+  @@index([productId])
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  orders    Order[]
+
+  @@index([phone])
+}
+
+model Order {
+  id              String        @id @default(cuid())
+  customerId      String
+  status          OrderStatus   @default(PENDING)
+  paymentMethod   PaymentMethod
+  subtotal        Decimal       @db.Decimal(10, 2)
+  total           Decimal       @db.Decimal(10, 2)
+  notes           String?
+  deliveryType    String
+  deliveryAddress String?
+  whatsappSent    Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  customer Customer  @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  items    OrderItem[]
+  sale     Sale?
+
+  @@index([createdAt])
+  @@index([status])
+  @@index([customerId])
+}
+
+model OrderItem {
+  id        String   @id @default(cuid())
+  orderId   String
+  productId String?
+  name      String
+  unitPrice Decimal  @db.Decimal(10, 2)
+  quantity  Int
+  subtotal  Decimal  @db.Decimal(10, 2)
+  createdAt DateTime @default(now())
+
+  order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model StockMovement {
+  id        String   @id @default(cuid())
+  productId String
+  type      String
+  quantity  Int
+  note      String?
+  createdAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([createdAt])
+}
+
+model CashRegister {
+  id             String         @id @default(cuid())
+  openedAt       DateTime
+  closedAt       DateTime?
+  initialAmount  Decimal        @db.Decimal(10, 2)
+  finalAmount    Decimal?       @db.Decimal(10, 2)
+  expectedAmount Decimal?       @db.Decimal(10, 2)
+  difference     Decimal?       @db.Decimal(10, 2)
+  isOpen         Boolean        @default(true)
+  notes          String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  movements CashMovement[]
+  sales     Sale[]
+
+  @@index([openedAt])
+  @@index([isOpen])
+}
+
+model CashMovement {
+  id             String           @id @default(cuid())
+  cashRegisterId String
+  type           CashMovementType
+  method         PaymentMethod?
+  amount         Decimal          @db.Decimal(10, 2)
+  description    String?
+  createdAt      DateTime         @default(now())
+
+  cashRegister CashRegister @relation(fields: [cashRegisterId], references: [id], onDelete: Cascade)
+
+  @@index([cashRegisterId])
+  @@index([createdAt])
+}
+
+model Sale {
+  id             String         @id @default(cuid())
+  orderId        String         @unique
+  cashRegisterId String?
+  paymentMethod  PaymentMethod
+  total          Decimal        @db.Decimal(10, 2)
+  createdAt      DateTime       @default(now())
+
+  order        Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  cashRegister CashRegister? @relation(fields: [cashRegisterId], references: [id], onDelete: SetNull)
+
+  @@index([cashRegisterId])
+  @@index([createdAt])
+}
+
+model SpecialOrder {
+  id             String             @id @default(cuid())
+  customerName   String
+  phone          String
+  requestedDate  DateTime
+  requestedTime  String?
+  orderType      String
+  peopleCount    Int?
+  details        String
+  status         SpecialOrderStatus @default(PENDING)
+  adminNotes     String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([requestedDate])
+  @@index([status])
+}
+
+model BlockedDate {
+  id         String   @id @default(cuid())
+  date       DateTime
+  isFullDay  Boolean  @default(true)
+  startTime  String?
+  endTime    String?
+  reason     String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([date])
+}
