@@ -24,7 +24,24 @@ const checkoutSchema = z.object({
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const parsed = checkoutSchema.parse(body);
+
+    const normalizedBody = {
+      ...body,
+      name: body.name ?? body.customerName ?? "",
+      phone: body.phone ?? "",
+      address: body.address ?? null,
+      deliveryType: normalizeDeliveryType(body.deliveryType),
+      notes: body.notes ?? body.observations ?? null,
+      paymentMethod: normalizePaymentMethod(body.paymentMethod),
+      items: Array.isArray(body.items)
+        ? body.items.map((item: any) => ({
+            productId: String(item.productId),
+            quantity: Number(item.quantity),
+          }))
+        : [],
+    };
+
+    const parsed = checkoutSchema.parse(normalizedBody);
 
     const result = await prisma.$transaction(async (tx) => {
       const productIds = parsed.items.map((i) => i.productId);
@@ -133,7 +150,7 @@ export async function POST(req: NextRequest) {
         parsed.deliveryType === "delivery" ? "Delivery" : "Retiro en local"
       }`,
       `Dirección: ${parsed.address || "-"}`,
-      `Pago: ${parsed.paymentMethod}`,
+      `Pago: ${humanPaymentMethod(parsed.paymentMethod)}`,
       "",
       "Productos:",
       ...result.lines.map(
@@ -144,9 +161,7 @@ export async function POST(req: NextRequest) {
       `Observaciones: ${parsed.notes || "-"}`,
       "",
       `TOTAL: $${result.total.toFixed(2)}`,
-    ]
-      .filter(Boolean)
-      .join("\n");
+    ].join("\n");
 
     return NextResponse.json({
       ok: true,
@@ -154,7 +169,19 @@ export async function POST(req: NextRequest) {
       total: result.total,
       whatsappMessage,
     });
-  } catch (error) {
+  } catch (error: any) {
+    console.error("POST /api/orders error:", error);
+
+    if (error?.issues) {
+      return NextResponse.json(
+        {
+          error: "Datos inválidos en el checkout",
+          issues: error.issues,
+        },
+        { status: 400 }
+      );
+    }
+
     return NextResponse.json(
       {
         error:
@@ -162,5 +189,57 @@ export async function POST(req: NextRequest) {
       },
       { status: 400 }
     );
+  }
+}
+
+function normalizePaymentMethod(value: unknown): "CASH" | "TRANSFER" | "DEBIT" | "CREDIT" {
+  const raw = String(value || "")
+    .trim()
+    .toUpperCase();
+
+  switch (raw) {
+    case "CASH":
+    case "EFECTIVO":
+      return "CASH";
+    case "TRANSFER":
+    case "TRANSFERENCIA":
+      return "TRANSFER";
+    case "DEBIT":
+    case "DEBITO":
+    case "DÉBITO":
+      return "DEBIT";
+    case "CREDIT":
+    case "CREDITO":
+    case "CRÉDITO":
+      return "CREDIT";
+    default:
+      return "CASH";
+  }
+}
+
+function normalizeDeliveryType(value: unknown): "delivery" | "pickup" {
+  const raw = String(value || "")
+    .trim()
+    .toLowerCase();
+
+  if (raw === "pickup" || raw === "retiro" || raw === "retiro-en-local") {
+    return "pickup";
+  }
+
+  return "delivery";
+}
+
+function humanPaymentMethod(value: string) {
+  switch (value) {
+    case "CASH":
+      return "Efectivo";
+    case "TRANSFER":
+      return "Transferencia";
+    case "DEBIT":
+      return "Débito";
+    case "CREDIT":
+      return "Crédito";
+    default:
+      return value;
   }
 }
