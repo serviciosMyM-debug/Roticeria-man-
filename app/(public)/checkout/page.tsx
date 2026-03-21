@@ -2,13 +2,31 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+const CART_STORAGE_KEY = "mana_cart";
+
 type CartItem = {
   productId: string;
   name: string;
   price: number;
   quantity: number;
+  stock: number;
   imageUrl?: string | null;
 };
+
+function normalizeCart(raw: any): CartItem[] {
+  if (!Array.isArray(raw)) return [];
+
+  return raw
+    .map((item) => ({
+      productId: String(item.productId ?? item.id ?? ""),
+      name: String(item.name ?? ""),
+      price: Number(item.price ?? 0),
+      quantity: Number(item.quantity ?? 1),
+      stock: Number(item.stock ?? 0),
+      imageUrl: item.imageUrl ?? null,
+    }))
+    .filter((item) => item.productId && item.name && item.quantity > 0);
+}
 
 export default function CheckoutPage() {
   const [items, setItems] = useState<CartItem[]>([]);
@@ -25,14 +43,22 @@ export default function CheckoutPage() {
   });
 
   useEffect(() => {
-    const raw = localStorage.getItem("cart");
-    if (!raw) return;
-
     try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        setItems(parsed);
+      const raw =
+        localStorage.getItem(CART_STORAGE_KEY) ||
+        localStorage.getItem("cart") ||
+        localStorage.getItem("cartItems");
+
+      if (!raw) {
+        setItems([]);
+        return;
       }
+
+      const parsed = JSON.parse(raw);
+      const normalized = normalizeCart(parsed);
+      setItems(normalized);
+
+      localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(normalized));
     } catch {
       setItems([]);
     }
@@ -97,9 +123,11 @@ export default function CheckoutPage() {
         throw new Error(data?.error || "No se pudo generar el pedido");
       }
 
+      localStorage.removeItem(CART_STORAGE_KEY);
       localStorage.removeItem("cart");
-      setItems([]);
+      localStorage.removeItem("cartItems");
 
+      setItems([]);
       setMessage("Pedido generado correctamente. Te redirigimos a WhatsApp...");
 
       const whatsappNumber = "5493416100044";
@@ -138,7 +166,7 @@ export default function CheckoutPage() {
               value={form.name}
               onChange={handleChange}
               placeholder="Nombre"
-              className="rounded-xl border p-3"
+              className="rounded-2xl border p-4"
               required
             />
             <input
@@ -146,7 +174,7 @@ export default function CheckoutPage() {
               value={form.phone}
               onChange={handleChange}
               placeholder="Teléfono"
-              className="rounded-xl border p-3"
+              className="rounded-2xl border p-4"
               required
             />
           </div>
@@ -155,7 +183,7 @@ export default function CheckoutPage() {
             name="deliveryType"
             value={form.deliveryType}
             onChange={handleChange}
-            className="rounded-xl border p-3"
+            className="rounded-2xl border p-4"
           >
             <option value="delivery">Delivery</option>
             <option value="pickup">Retiro en local</option>
@@ -167,7 +195,7 @@ export default function CheckoutPage() {
               value={form.address}
               onChange={handleChange}
               placeholder="Dirección"
-              className="rounded-xl border p-3"
+              className="rounded-2xl border p-4"
               required
             />
           )}
@@ -176,7 +204,7 @@ export default function CheckoutPage() {
             name="paymentMethod"
             value={form.paymentMethod}
             onChange={handleChange}
-            className="rounded-xl border p-3"
+            className="rounded-2xl border p-4"
           >
             <option value="CASH">Efectivo</option>
             <option value="TRANSFER">Transferencia</option>
@@ -189,13 +217,13 @@ export default function CheckoutPage() {
             value={form.notes}
             onChange={handleChange}
             placeholder="Observaciones"
-            className="min-h-[140px] rounded-xl border p-3"
+            className="min-h-[140px] rounded-2xl border p-4"
           />
 
           <button
             type="submit"
             disabled={loading}
-            className="rounded-xl bg-amber-500 px-5 py-3 font-bold uppercase text-white"
+            className="rounded-2xl bg-amber-500 px-6 py-4 text-xl font-bold uppercase text-white"
           >
             {loading ? "Procesando..." : "Confirmar pedido"}
           </button>
@@ -206,17 +234,20 @@ export default function CheckoutPage() {
         </form>
 
         <aside className="h-fit rounded-3xl bg-white p-6 shadow-sm">
-          <h2 className="text-2xl font-black uppercase">Resumen</h2>
+          <h2 className="text-3xl font-black uppercase">Resumen</h2>
 
-          <div className="mt-5 space-y-4">
+          <div className="mt-6 space-y-4">
             {items.length === 0 ? (
               <p className="text-zinc-500">No hay productos en el carrito.</p>
             ) : (
               items.map((item, index) => (
-                <div key={`${item.productId}-${index}`} className="rounded-2xl border p-4">
+                <div
+                  key={`${item.productId}-${index}`}
+                  className="rounded-2xl border p-4"
+                >
                   <p className="font-semibold">{item.name}</p>
                   <p className="text-sm text-zinc-500">
-                    {item.quantity} x ${Number(item.price).toFixed(2)}
+                    {item.quantity} x ${Number(item.price).toFixed(0)}
                   </p>
                 </div>
               ))
@@ -224,7 +255,7 @@ export default function CheckoutPage() {
           </div>
 
           <div className="mt-6 border-t pt-4">
-            <p className="text-lg font-bold">Total: ${total.toFixed(2)}</p>
+            <p className="text-2xl font-black">Total: ${total.toFixed(2)}</p>
           </div>
         </aside>
       </div>
