@@ -7,11 +7,13 @@ import {
   clearCart,
   getCartTotal,
 } from "@/lib/cart";
+import { useToast } from "@/components/ui/toast";
 
 export default function CheckoutPage() {
   const [items, setItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const { showToast } = useToast();
 
   const [form, setForm] = useState({
     name: "",
@@ -85,7 +87,12 @@ export default function CheckoutPage() {
 
       clearCart();
       setItems([]);
-      setMessage("Pedido generado correctamente. Redirigiendo a WhatsApp...");
+
+      showToast({
+        type: "success",
+        title: "Pedido generado",
+        description: "Redirigiendo a WhatsApp para confirmar.",
+      });
 
       const whatsappNumber = "5493416100044";
       const url = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(
@@ -94,9 +101,16 @@ export default function CheckoutPage() {
 
       setTimeout(() => {
         window.location.href = url;
-      }, 700);
+      }, 900);
     } catch (error: any) {
-      setMessage(error.message || "Error al finalizar la compra");
+      const msg = error.message || "Error al finalizar la compra";
+      setMessage(msg);
+
+      showToast({
+        type: "error",
+        title: "No se pudo finalizar",
+        description: msg,
+      });
     } finally {
       setLoading(false);
     }

@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { addToCart } from "@/lib/cart";
 import { formatCurrency } from "@/lib/utils";
+import { useToast } from "@/components/ui/toast";
 
 type ProductCardProps = {
   product: {
@@ -22,6 +23,7 @@ type ProductCardProps = {
 
 export function ProductCard({ product }: ProductCardProps) {
   const finalPrice = Number(product.promoPrice ?? product.price);
+  const { showToast } = useToast();
 
   function handleAddToCart() {
     addToCart({
@@ -33,7 +35,11 @@ export function ProductCard({ product }: ProductCardProps) {
       imageUrl: product.imageUrl ?? null,
     });
 
-    alert("Producto agregado al carrito");
+    showToast({
+      type: "success",
+      title: "Producto agregado",
+      description: `${product.name} se agregó al carrito.`,
+    });
   }
 
   return (
