@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 export default async function AdminPedidosPage() {
   const orders = await prisma.order.findMany({
     orderBy: {
@@ -28,6 +30,7 @@ export default async function AdminPedidosPage() {
               <th className="p-4 text-left font-bold uppercase">Cliente</th>
               <th className="p-4 text-left font-bold uppercase">Estado</th>
               <th className="p-4 text-left font-bold uppercase">Pago</th>
+              <th className="p-4 text-left font-bold uppercase">Entrega</th>
               <th className="p-4 text-left font-bold uppercase">Total</th>
               <th className="p-4 text-left font-bold uppercase">Fecha</th>
             </tr>
@@ -35,7 +38,7 @@ export default async function AdminPedidosPage() {
           <tbody>
             {orders.length === 0 ? (
               <tr>
-                <td colSpan={6} className="p-6 text-center text-zinc-500">
+                <td colSpan={7} className="p-6 text-center text-zinc-500">
                   No hay pedidos todavía.
                 </td>
               </tr>
@@ -53,6 +56,7 @@ export default async function AdminPedidosPage() {
                   </td>
                   <td className="p-4">{order.status}</td>
                   <td className="p-4">{order.paymentMethod}</td>
+                  <td className="p-4">{order.deliveryType}</td>
                   <td className="p-4">${Number(order.total).toFixed(2)}</td>
                   <td className="p-4">
                     {new Date(order.createdAt).toLocaleString()}

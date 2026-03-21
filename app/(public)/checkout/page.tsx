@@ -85,7 +85,7 @@ export default function CheckoutPage() {
 
       clearCart();
       setItems([]);
-      setMessage("Pedido generado correctamente. Te redirigimos a WhatsApp...");
+      setMessage("Pedido generado correctamente. Redirigiendo a WhatsApp...");
 
       const whatsappNumber = "5493416100044";
       const url = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(
@@ -93,9 +93,8 @@ export default function CheckoutPage() {
       )}`;
 
       setTimeout(() => {
-        window.open(url, "_blank");
-        window.location.href = "/";
-      }, 1000);
+        window.location.href = url;
+      }, 700);
     } catch (error: any) {
       setMessage(error.message || "Error al finalizar la compra");
     } finally {
