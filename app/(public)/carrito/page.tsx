@@ -2,81 +2,46 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-
-const CART_STORAGE_KEY = "mana_cart";
-
-type CartItem = {
-  productId: string;
-  name: string;
-  price: number;
-  quantity: number;
-  stock: number;
-  imageUrl?: string | null;
-};
-
-function normalizeCart(raw: any): CartItem[] {
-  if (!Array.isArray(raw)) return [];
-
-  return raw
-    .map((item) => ({
-      productId: String(item.productId ?? item.id ?? ""),
-      name: String(item.name ?? ""),
-      price: Number(item.price ?? 0),
-      quantity: Number(item.quantity ?? 1),
-      stock: Number(item.stock ?? 0),
-      imageUrl: item.imageUrl ?? null,
-    }))
-    .filter((item) => item.productId && item.name && item.quantity > 0);
-}
+import {
+  CartItem,
+  getCart,
+  saveCart,
+  removeFromCart,
+  updateCartQuantity,
+  getCartTotal,
+} from "@/lib/cart";
 
 export default function CarritoPage() {
   const [items, setItems] = useState<CartItem[]>([]);
 
-  useEffect(() => {
-    try {
-      const raw =
-        localStorage.getItem(CART_STORAGE_KEY) ||
-        localStorage.getItem("cart") ||
-        localStorage.getItem("cartItems");
-
-      if (!raw) {
-        setItems([]);
-        return;
-      }
-
-      const parsed = JSON.parse(raw);
-      const normalized = normalizeCart(parsed);
-      setItems(normalized);
-
-      localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(normalized));
-    } catch {
-      setItems([]);
-    }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
-  }, [items]);
-
-  const subtotal = useMemo(() => {
-    return items.reduce((acc, item) => acc + item.price * item.quantity, 0);
-  }, [items]);
-
-  function updateQuantity(productId: string, quantity: number) {
-    setItems((prev) =>
-      prev.map((item) =>
-        item.productId === productId
-          ? {
-              ...item,
-              quantity: Math.max(1, Math.min(quantity, item.stock || quantity)),
-            }
-          : item
-      )
-    );
+  function refresh() {
+    setItems(getCart());
   }
 
-  function removeItem(productId: string) {
-    setItems((prev) => prev.filter((item) => item.productId !== productId));
+  useEffect(() => {
+    refresh();
+
+    const handler = () => refresh();
+
+    window.addEventListener("mana-cart-updated", handler);
+    window.addEventListener("storage", handler);
+
+    return () => {
+      window.removeEventListener("mana-cart-updated", handler);
+      window.removeEventListener("storage", handler);
+    };
+  }, []);
+
+  const subtotal = useMemo(() => getCartTotal(items), [items]);
+
+  function handleQuantity(productId: string, quantity: number) {
+    updateCartQuantity(productId, quantity);
+    refresh();
+  }
+
+  function handleRemove(productId: string) {
+    removeFromCart(productId);
+    refresh();
   }
 
   return (
@@ -121,7 +86,7 @@ export default function CarritoPage() {
                       max={item.stock || 999}
                       value={item.quantity}
                       onChange={(e) =>
-                        updateQuantity(item.productId, Number(e.target.value))
+                        handleQuantity(item.productId, Number(e.target.value))
                       }
                       className="w-full rounded-2xl border p-3"
                     />
@@ -133,7 +98,7 @@ export default function CarritoPage() {
                     </p>
                     <button
                       type="button"
-                      onClick={() => removeItem(item.productId)}
+                      onClick={() => handleRemove(item.productId)}
                       className="mt-4 font-bold text-red-600"
                     >
                       Quitar

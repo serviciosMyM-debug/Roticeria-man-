@@ -1,32 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-
-const CART_STORAGE_KEY = "mana_cart";
-
-type CartItem = {
-  productId: string;
-  name: string;
-  price: number;
-  quantity: number;
-  stock: number;
-  imageUrl?: string | null;
-};
-
-function normalizeCart(raw: any): CartItem[] {
-  if (!Array.isArray(raw)) return [];
-
-  return raw
-    .map((item) => ({
-      productId: String(item.productId ?? item.id ?? ""),
-      name: String(item.name ?? ""),
-      price: Number(item.price ?? 0),
-      quantity: Number(item.quantity ?? 1),
-      stock: Number(item.stock ?? 0),
-      imageUrl: item.imageUrl ?? null,
-    }))
-    .filter((item) => item.productId && item.name && item.quantity > 0);
-}
+import {
+  CartItem,
+  getCart,
+  clearCart,
+  getCartTotal,
+} from "@/lib/cart";
 
 export default function CheckoutPage() {
   const [items, setItems] = useState<CartItem[]>([]);
@@ -43,30 +23,10 @@ export default function CheckoutPage() {
   });
 
   useEffect(() => {
-    try {
-      const raw =
-        localStorage.getItem(CART_STORAGE_KEY) ||
-        localStorage.getItem("cart") ||
-        localStorage.getItem("cartItems");
-
-      if (!raw) {
-        setItems([]);
-        return;
-      }
-
-      const parsed = JSON.parse(raw);
-      const normalized = normalizeCart(parsed);
-      setItems(normalized);
-
-      localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(normalized));
-    } catch {
-      setItems([]);
-    }
+    setItems(getCart());
   }, []);
 
-  const total = useMemo(() => {
-    return items.reduce((acc, item) => acc + item.price * item.quantity, 0);
-  }, [items]);
+  const total = useMemo(() => getCartTotal(items), [items]);
 
   function handleChange(
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -123,10 +83,7 @@ export default function CheckoutPage() {
         throw new Error(data?.error || "No se pudo generar el pedido");
       }
 
-      localStorage.removeItem(CART_STORAGE_KEY);
-      localStorage.removeItem("cart");
-      localStorage.removeItem("cartItems");
-
+      clearCart();
       setItems([]);
       setMessage("Pedido generado correctamente. Te redirigimos a WhatsApp...");
 

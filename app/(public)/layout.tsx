@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { ReactNode } from "react";
+import CartIndicator from "@/components/cart-indicator";
 
 export const dynamic = "force-dynamic";
 
@@ -34,9 +35,7 @@ export default async function PublicLayout({
             <Link href="/menu#menu-del-dia" className="hover:text-amber-600">
               Menú del día
             </Link>
-            <Link href="/carrito" className="hover:text-amber-600">
-              Carrito
-            </Link>
+            <CartIndicator />
             <Link href="/admin" className="hover:text-amber-600">
               Admin
             </Link>
