@@ -45,8 +45,16 @@ export default async function ProductDetailPage({ params }: Props) {
     },
   });
 
-  const promo = getPromoState(product);
-  const finalPrice = getEffectivePrice(product);
+  const promoProduct = {
+    isPromo: product.isPromo,
+    promoPrice: product.promoPrice != null ? Number(product.promoPrice) : null,
+    promoStartsAt: product.promoStartsAt,
+    promoEndsAt: product.promoEndsAt,
+    price: Number(product.price),
+  };
+
+  const promo = getPromoState(promoProduct);
+  const finalPrice = getEffectivePrice(promoProduct);
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-10">
