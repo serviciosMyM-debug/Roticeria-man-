@@ -6,7 +6,6 @@ import { useEffect, useMemo, useState } from "react";
 import { addToCart } from "@/lib/cart";
 import { formatCurrency } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
-import { getEffectivePrice, getPromoState, toPromoTime } from "@/lib/promo";
 
 type ProductCardProps = {
   product: {
@@ -14,8 +13,8 @@ type ProductCardProps = {
     slug: string;
     name: string;
     shortDescription: string;
-    price: any;
-    promoPrice?: any;
+    price: number;
+    promoPrice?: number | null;
     promoStartsAt?: string | Date | null;
     promoEndsAt?: string | Date | null;
     stock: number;
@@ -24,6 +23,13 @@ type ProductCardProps = {
     isDailyMenu?: boolean;
   };
 };
+
+function toMs(value?: string | Date | null) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  const ms = date.getTime();
+  return Number.isNaN(ms) ? null : ms;
+}
 
 function formatRemaining(ms: number) {
   if (ms <= 0) return "00:00:00";
@@ -46,21 +52,8 @@ export function ProductCard({ product }: ProductCardProps) {
   const { showToast } = useToast();
   const [now, setNow] = useState(Date.now());
 
-  const promoEndMs = toPromoTime(product.promoEndsAt);
-  const promoStartMs = toPromoTime(product.promoStartsAt);
-  const normalizedProduct = {
-  ...product,
-  price: Number(product.price),
-  promoPrice:
-    product.promoPrice != null ? Number(product.promoPrice) : null,
-};
-
-const promo = useMemo(
-  () => getPromoState(normalizedProduct),
-  [normalizedProduct, now]
-);
-
-const finalPrice = getEffectivePrice(normalizedProduct);
+  const promoStartMs = toMs(product.promoStartsAt);
+  const promoEndMs = toMs(product.promoEndsAt);
 
   useEffect(() => {
     if (!product.isPromo) return;
@@ -71,6 +64,34 @@ const finalPrice = getEffectivePrice(normalizedProduct);
 
     return () => clearInterval(timer);
   }, [product.isPromo]);
+
+  const promoState = useMemo(() => {
+    if (!product.isPromo || product.promoPrice == null) {
+      return "none" as const;
+    }
+
+    if (!promoStartMs && !promoEndMs) {
+      return "active" as const;
+    }
+
+    if (promoStartMs && now < promoStartMs) {
+      return "scheduled" as const;
+    }
+
+    if (promoEndMs && now >= promoEndMs) {
+      return "ended" as const;
+    }
+
+    return "active" as const;
+  }, [product.isPromo, product.promoPrice, promoStartMs, promoEndMs, now]);
+
+  const isPromoActive = promoState === "active";
+  const isPromoScheduled = promoState === "scheduled";
+
+  const finalPrice =
+    isPromoActive && product.promoPrice != null
+      ? Number(product.promoPrice)
+      : Number(product.price);
 
   function handleAddToCart() {
     addToCart({
@@ -90,7 +111,7 @@ const finalPrice = getEffectivePrice(normalizedProduct);
   }
 
   return (
-    <article className="card overflow-hidden">
+    <article className="card overflow-hidden rounded-3xl bg-white shadow-sm">
       <div className="relative h-56">
         <Image
           src={
@@ -102,13 +123,13 @@ const finalPrice = getEffectivePrice(normalizedProduct);
           className="object-cover"
         />
 
-        {promo.active && promoEndMs && (
+        {isPromoActive && promoEndMs && (
           <div className="absolute left-3 top-3 rounded-full bg-red-600 px-3 py-1 text-xs font-bold uppercase text-white shadow-lg">
             ⏱ {formatRemaining(promoEndMs - now)}
           </div>
         )}
 
-        {promo.scheduled && promoStartMs && (
+        {isPromoScheduled && promoStartMs && (
           <div className="absolute left-3 top-3 rounded-full bg-zinc-900 px-3 py-1 text-xs font-bold uppercase text-white shadow-lg">
             Arranca en {formatRemaining(promoStartMs - now)}
           </div>
@@ -127,10 +148,12 @@ const finalPrice = getEffectivePrice(normalizedProduct);
             </span>
           )}
 
-          {promo.active ? (
-            <span className="badge bg-red-100 text-red-700">Promo activa</span>
-          ) : promo.scheduled ? (
-            <span className="badge bg-amber-100 text-amber-700">Promo programada</span>
+          {isPromoActive ? (
+            <span className="badge bg-red-100 text-red-700">Promo</span>
+          ) : isPromoScheduled ? (
+            <span className="badge bg-amber-100 text-amber-700">
+              Promo programada
+            </span>
           ) : null}
 
           {product.isDailyMenu ? (
@@ -151,7 +174,7 @@ const finalPrice = getEffectivePrice(normalizedProduct);
               {formatCurrency(finalPrice)}
             </p>
 
-            {promo.active && product.promoPrice ? (
+            {isPromoActive && product.promoPrice != null ? (
               <p className="text-sm text-zinc-400 line-through">
                 {formatCurrency(Number(product.price))}
               </p>
