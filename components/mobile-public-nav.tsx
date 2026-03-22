@@ -41,6 +41,10 @@ export default function MobilePublicNav() {
     };
   }, [open]);
 
+  function toggleMenu() {
+    setOpen((prev) => !prev);
+  }
+
   function closeMenu() {
     setOpen(false);
   }
@@ -52,11 +56,25 @@ export default function MobilePublicNav() {
 
         <button
           type="button"
-          onClick={() => setOpen(true)}
-          aria-label="Abrir menú"
-          className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-zinc-200 bg-white text-2xl font-bold text-zinc-900 shadow-sm"
+          onClick={toggleMenu}
+          aria-label={open ? "Cerrar menú" : "Abrir menú"}
+          className="relative inline-flex h-11 w-11 items-center justify-center rounded-xl border border-zinc-200 bg-white text-2xl font-bold text-zinc-900 shadow-sm transition"
         >
-          ☰
+          <span
+            className={`absolute transition-all duration-200 ${
+              open ? "scale-0 opacity-0 rotate-90" : "scale-100 opacity-100 rotate-0"
+            }`}
+          >
+            ☰
+          </span>
+
+          <span
+            className={`absolute transition-all duration-200 ${
+              open ? "scale-100 opacity-100 rotate-0" : "scale-0 opacity-0 -rotate-90"
+            }`}
+          >
+            ✕
+          </span>
         </button>
       </div>
 
