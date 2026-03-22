@@ -22,7 +22,7 @@ export default async function PublicLayout({
 
   return (
     <div className="min-h-screen bg-[#e9e6df] text-zinc-900">
-      <header className="border-b bg-white">
+      <header className="sticky top-0 z-50 border-b bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <Link href="/" className="text-3xl font-black uppercase tracking-wide">
             {businessName}
@@ -45,21 +45,36 @@ export default async function PublicLayout({
 
       <main>{children}</main>
 
-      <footer className="mt-12 bg-black px-6 py-10 text-white">
-        <div className="mx-auto grid max-w-7xl gap-6 md:grid-cols-3">
-          <div>
-            <p className="text-3xl font-black uppercase">{businessName}</p>
-            <p className="mt-2 text-base text-zinc-300">{description}</p>
-          </div>
+      <footer className="mt-12 border-t border-zinc-300 px-6 py-6 text-center text-sm text-zinc-600">
+        <div className="mx-auto max-w-7xl">
+          <p>
+            Hecho por{" "}
+            <a
+              href="https://www.serviciosmym.com.ar"
+              target="_blank"
+              rel="noreferrer"
+              className="font-bold text-amber-600 transition hover:underline"
+            >
+              ServiciosMyM
+            </a>{" "}
+            · Todos los derechos reservados.
+          </p>
 
-          <div>
-            <p className="text-xl font-black uppercase">Horarios</p>
-            <p className="mt-2 text-zinc-300">{openingHours}</p>
-          </div>
+          <div className="mt-4 grid gap-4 text-left md:grid-cols-3 md:text-center">
+            <div>
+              <p className="font-bold uppercase text-zinc-900">{businessName}</p>
+              <p className="mt-1">{description}</p>
+            </div>
 
-          <div>
-            <p className="text-xl font-black uppercase">Ubicación</p>
-            <p className="mt-2 text-zinc-300">{address}</p>
+            <div>
+              <p className="font-bold uppercase text-zinc-900">Horarios</p>
+              <p className="mt-1">{openingHours}</p>
+            </div>
+
+            <div>
+              <p className="font-bold uppercase text-zinc-900">Ubicación</p>
+              <p className="mt-1">{address}</p>
+            </div>
           </div>
         </div>
       </footer>
@@ -67,6 +82,7 @@ export default async function PublicLayout({
       <a
         href={`https://wa.me/${whatsapp}`}
         target="_blank"
+        rel="noreferrer"
         className="fixed bottom-5 right-5 rounded-full bg-green-500 px-5 py-3 font-bold text-white shadow-lg"
       >
         WhatsApp
