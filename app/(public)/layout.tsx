@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { ReactNode } from "react";
 import CartIndicator from "@/components/cart-indicator";
+import MobilePublicNav from "@/components/mobile-public-nav";
 
 export const dynamic = "force-dynamic";
 
@@ -23,12 +24,15 @@ export default async function PublicLayout({
   return (
     <div className="min-h-screen bg-[#e9e6df] text-zinc-900">
       <header className="sticky top-0 z-50 border-b bg-white/95 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <Link href="/" className="text-3xl font-black uppercase tracking-wide">
+        <div className="relative mx-auto flex max-w-7xl items-center justify-between px-4 py-4 md:px-6">
+          <Link
+            href="/"
+            className="max-w-[55%] text-2xl font-black uppercase tracking-wide md:max-w-none md:text-3xl"
+          >
             {businessName}
           </Link>
 
-          <nav className="flex flex-wrap items-center gap-6 text-sm font-semibold uppercase">
+          <nav className="hidden flex-wrap items-center gap-6 text-sm font-semibold uppercase md:flex">
             <Link href="/menu" className="hover:text-amber-600">
               Productos
             </Link>
@@ -40,6 +44,8 @@ export default async function PublicLayout({
               Admin
             </Link>
           </nav>
+
+          <MobilePublicNav />
         </div>
       </header>
 
