@@ -25,17 +25,30 @@ type SaleItem = {
   };
 };
 
+type CashRegisterPayload = {
+  id: string;
+  openedAt: string;
+  closedAt: string | null;
+  notes?: string | null;
+  sales: SaleItem[];
+  movements: CashMovement[];
+};
+
 type CashData = {
   ok: boolean;
   isOpen: boolean;
-  cashRegister: {
-    id: string;
-    openedAt: string;
-    closedAt: string | null;
-    sales: SaleItem[];
-    movements: CashMovement[];
-  } | null;
+  cashRegister: CashRegisterPayload | null;
   summary: {
+    initialAmount: number;
+    ingresos: number;
+    egresos: number;
+    ventas: number;
+    expectedAmount: number;
+    finalAmount: number;
+    difference: number;
+  };
+  lastClosedCash: CashRegisterPayload | null;
+  lastClosedSummary: {
     initialAmount: number;
     ingresos: number;
     egresos: number;
@@ -68,6 +81,7 @@ export default function AdminCajaPage() {
 
   const [closeForm, setCloseForm] = useState({
     finalAmount: "",
+    notes: "",
   });
 
   async function loadCash() {
@@ -119,7 +133,7 @@ export default function AdminCajaPage() {
 
       setIncomeForm({ amount: "", description: "" });
       setExpenseForm({ amount: "", description: "" });
-      setCloseForm({ finalAmount: "" });
+      setCloseForm({ finalAmount: "", notes: "" });
 
       await loadCash();
     } catch (error: any) {
@@ -142,6 +156,7 @@ export default function AdminCajaPage() {
   }
 
   const summary = data.summary;
+  const closedSummary = data.lastClosedSummary;
 
   return (
     <div className="space-y-8">
@@ -153,53 +168,189 @@ export default function AdminCajaPage() {
       </div>
 
       {!data.isOpen ? (
-        <div className="rounded-3xl bg-white p-6 shadow-sm">
-          <h2 className="text-2xl font-black uppercase">Abrir caja</h2>
+        <>
+          <div className="rounded-3xl bg-white p-6 shadow-sm">
+            <h2 className="text-2xl font-black uppercase">Abrir caja</h2>
 
-          <div className="mt-5 grid gap-4 md:grid-cols-[180px_minmax(0,1fr)_auto]">
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={openForm.initialAmount}
-              onChange={(e) =>
-                setOpenForm((prev) => ({
-                  ...prev,
-                  initialAmount: e.target.value,
-                }))
-              }
-              className="rounded-2xl border p-4"
-              placeholder="Monto inicial"
-            />
+            <div className="mt-5 grid gap-4 md:grid-cols-[180px_minmax(0,1fr)_auto]">
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={openForm.initialAmount}
+                onChange={(e) =>
+                  setOpenForm((prev) => ({
+                    ...prev,
+                    initialAmount: e.target.value,
+                  }))
+                }
+                className="rounded-2xl border p-4"
+                placeholder="Monto inicial"
+              />
 
-            <input
-              value={openForm.notes}
-              onChange={(e) =>
-                setOpenForm((prev) => ({
-                  ...prev,
-                  notes: e.target.value,
-                }))
-              }
-              className="rounded-2xl border p-4"
-              placeholder="Observación"
-            />
+              <input
+                value={openForm.notes}
+                onChange={(e) =>
+                  setOpenForm((prev) => ({
+                    ...prev,
+                    notes: e.target.value,
+                  }))
+                }
+                className="rounded-2xl border p-4"
+                placeholder="Observación"
+              />
 
-            <button
-              type="button"
-              disabled={loading}
-              onClick={() =>
-                runAction({
-                  action: "open",
-                  initialAmount: Number(openForm.initialAmount),
-                  notes: openForm.notes,
-                })
-              }
-              className="rounded-2xl bg-amber-500 px-6 py-4 font-bold uppercase text-white disabled:opacity-50"
-            >
-              Abrir caja
-            </button>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() =>
+                  runAction({
+                    action: "open",
+                    initialAmount: Number(openForm.initialAmount),
+                    notes: openForm.notes,
+                  })
+                }
+                className="rounded-2xl bg-amber-500 px-6 py-4 font-bold uppercase text-white disabled:opacity-50"
+              >
+                Abrir caja
+              </button>
+            </div>
           </div>
-        </div>
+
+          {data.lastClosedCash && (
+            <div className="space-y-6">
+              <div className="rounded-3xl bg-white p-6 shadow-sm">
+                <h2 className="text-3xl font-black uppercase">Resumen del último cierre</h2>
+                <p className="mt-2 text-zinc-600">
+                  Revisión detallada para entender diferencias de caja y auditar el cierre.
+                </p>
+
+                <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <SummaryBox title="Monto inicial" value={closedSummary.initialAmount} />
+                  <SummaryBox title="Ventas" value={closedSummary.ventas} />
+                  <SummaryBox title="Ingresos" value={closedSummary.ingresos} />
+                  <SummaryBox title="Egresos" value={closedSummary.egresos} />
+                  <SummaryBox title="Esperado" value={closedSummary.expectedAmount} />
+                  <SummaryBox title="Contado" value={closedSummary.finalAmount} />
+                  <SummaryBox
+                    title="Diferencia"
+                    value={closedSummary.difference}
+                    highlight
+                  />
+                  <InfoBox
+                    title="Estado del cierre"
+                    text={
+                      closedSummary.difference === 0
+                        ? "Caja cerró exacta."
+                        : closedSummary.difference > 0
+                        ? "Sobró dinero respecto al esperado."
+                        : "Faltó dinero respecto al esperado."
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-6 xl:grid-cols-2">
+                <div className="rounded-3xl bg-white p-6 shadow-sm">
+                  <h2 className="text-3xl font-black uppercase">Ventas del cierre</h2>
+
+                  <div className="mt-5 space-y-3">
+                    {data.lastClosedCash.sales.length ? (
+                      data.lastClosedCash.sales.map((sale) => (
+                        <div
+                          key={sale.id}
+                          className="flex items-center justify-between rounded-2xl border p-4"
+                        >
+                          <div>
+                            <p className="font-semibold">
+                              Pedido {sale.order.displayNumber}
+                            </p>
+                            <p className="text-sm text-zinc-500">
+                              {sale.order.customerName}
+                            </p>
+                            <p className="text-sm text-zinc-500">
+                              {new Date(sale.createdAt).toLocaleString()}
+                            </p>
+                          </div>
+
+                          <div className="text-right">
+                            <p className="font-black">${sale.total.toFixed(2)}</p>
+                            <p className="text-xs uppercase text-zinc-500">
+                              {sale.paymentMethod}
+                            </p>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-zinc-500">No hubo ventas en ese cierre.</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-3xl bg-white p-6 shadow-sm">
+                  <h2 className="text-3xl font-black uppercase">Movimientos del cierre</h2>
+
+                  <div className="mt-5 space-y-3">
+                    {data.lastClosedCash.movements.length ? (
+                      data.lastClosedCash.movements.map((movement) => (
+                        <div
+                          key={movement.id}
+                          className="flex items-center justify-between rounded-2xl border p-4"
+                        >
+                          <div>
+                            <p className="font-semibold">{movement.type}</p>
+                            <p className="text-sm text-zinc-500">
+                              {movement.description || "Sin descripción"}
+                            </p>
+                            <p className="text-sm text-zinc-500">
+                              {new Date(movement.createdAt).toLocaleString()}
+                            </p>
+                          </div>
+
+                          <p
+                            className={`font-black ${
+                              movement.type === "EXPENSE"
+                                ? "text-red-600"
+                                : "text-emerald-600"
+                            }`}
+                          >
+                            ${movement.amount.toFixed(2)}
+                          </p>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-zinc-500">No hubo movimientos registrados.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-3xl bg-white p-6 shadow-sm">
+                <h2 className="text-3xl font-black uppercase">Lectura fina del cierre</h2>
+
+                <div className="mt-5 space-y-3 text-zinc-700">
+                  <p>
+                    <strong>Si sobró dinero:</strong> puede venir de ventas cobradas y no registradas,
+                    ingresos manuales faltantes de detalle, redondeos o diferencias de conteo.
+                  </p>
+                  <p>
+                    <strong>Si faltó dinero:</strong> puede deberse a egresos no cargados, errores al dar
+                    vuelto, ventas anuladas informalmente o fallas de conteo al cierre.
+                  </p>
+                  <p>
+                    <strong>Qué revisar:</strong> tickets confirmados, egresos manuales, movimientos
+                    extraordinarios y coincidencia entre efectivo contado y lo esperado por sistema.
+                  </p>
+                  {data.lastClosedCash.notes ? (
+                    <p>
+                      <strong>Observación del cierre:</strong> {data.lastClosedCash.notes}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       ) : (
         <>
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-5">
@@ -272,10 +423,25 @@ export default function AdminCajaPage() {
                   step="0.01"
                   value={closeForm.finalAmount}
                   onChange={(e) =>
-                    setCloseForm({ finalAmount: e.target.value })
+                    setCloseForm((prev) => ({
+                      ...prev,
+                      finalAmount: e.target.value,
+                    }))
                   }
                   className="w-full rounded-2xl border p-4"
                   placeholder="Monto real al cierre"
+                />
+
+                <textarea
+                  value={closeForm.notes}
+                  onChange={(e) =>
+                    setCloseForm((prev) => ({
+                      ...prev,
+                      notes: e.target.value,
+                    }))
+                  }
+                  className="min-h-[120px] w-full rounded-2xl border p-4"
+                  placeholder="Observación del cierre"
                 />
 
                 <button
@@ -285,6 +451,7 @@ export default function AdminCajaPage() {
                     runAction({
                       action: "close",
                       finalAmount: Number(closeForm.finalAmount),
+                      notes: closeForm.notes,
                     })
                   }
                   className="w-full rounded-2xl bg-black px-6 py-4 font-bold uppercase text-white disabled:opacity-50"
@@ -384,6 +551,43 @@ function StatCard({ title, value }: { title: string; value: number }) {
     <div className="rounded-3xl bg-white p-6 shadow-sm">
       <p className="text-sm uppercase text-zinc-500">{title}</p>
       <p className="mt-3 text-4xl font-black">${value.toFixed(2)}</p>
+    </div>
+  );
+}
+
+function SummaryBox({
+  title,
+  value,
+  highlight = false,
+}: {
+  title: string;
+  value: number;
+  highlight?: boolean;
+}) {
+  const color =
+    !highlight
+      ? "text-zinc-900"
+      : value === 0
+      ? "text-zinc-900"
+      : value > 0
+      ? "text-emerald-600"
+      : "text-red-600";
+
+  return (
+    <div className="rounded-2xl border p-4">
+      <p className="text-sm uppercase text-zinc-500">{title}</p>
+      <p className={`mt-2 text-3xl font-black ${color}`}>
+        ${value.toFixed(2)}
+      </p>
+    </div>
+  );
+}
+
+function InfoBox({ title, text }: { title: string; text: string }) {
+  return (
+    <div className="rounded-2xl border p-4">
+      <p className="text-sm uppercase text-zinc-500">{title}</p>
+      <p className="mt-2 text-zinc-700">{text}</p>
     </div>
   );
 }

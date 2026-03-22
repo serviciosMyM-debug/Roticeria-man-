@@ -18,7 +18,7 @@ function formatOrderNumber(value?: number | null) {
 
 export async function GET() {
   try {
-    const cashRegister = await prisma.cashRegister.findFirst({
+    const currentCash = await prisma.cashRegister.findFirst({
       where: {
         isOpen: true,
       },
@@ -52,12 +52,43 @@ export async function GET() {
       },
     });
 
-    if (!cashRegister) {
-      return NextResponse.json({
-        ok: true,
+    const lastClosedCash = await prisma.cashRegister.findFirst({
+      where: {
         isOpen: false,
-        cashRegister: null,
-        summary: {
+      },
+      orderBy: {
+        closedAt: "desc",
+      },
+      include: {
+        movements: {
+          orderBy: {
+            createdAt: "desc",
+          },
+        },
+        sales: {
+          orderBy: {
+            createdAt: "desc",
+          },
+          include: {
+            order: {
+              select: {
+                id: true,
+                dailyOrderNumber: true,
+                customer: {
+                  select: {
+                    name: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    function buildSummary(cashRegister: typeof currentCash | typeof lastClosedCash | null) {
+      if (!cashRegister) {
+        return {
           initialAmount: 0,
           ingresos: 0,
           egresos: 0,
@@ -65,32 +96,42 @@ export async function GET() {
           expectedAmount: 0,
           finalAmount: 0,
           difference: 0,
-        },
-      });
+        };
+      }
+
+      const initialAmount = Number(cashRegister.initialAmount);
+
+      const ventas = cashRegister.movements
+        .filter((m) => m.type === CashMovementType.SALE)
+        .reduce((acc, m) => acc + Number(m.amount), 0);
+
+      const ingresos = cashRegister.movements
+        .filter((m) => m.type === CashMovementType.INCOME)
+        .reduce((acc, m) => acc + Number(m.amount), 0);
+
+      const egresos = cashRegister.movements
+        .filter((m) => m.type === CashMovementType.EXPENSE)
+        .reduce((acc, m) => acc + Number(m.amount), 0);
+
+      const expectedAmount = initialAmount + ventas + ingresos - egresos;
+      const finalAmount = cashRegister.finalAmount ? Number(cashRegister.finalAmount) : 0;
+      const difference = cashRegister.difference ? Number(cashRegister.difference) : 0;
+
+      return {
+        initialAmount,
+        ingresos,
+        egresos,
+        ventas,
+        expectedAmount,
+        finalAmount,
+        difference,
+      };
     }
 
-    const initialAmount = Number(cashRegister.initialAmount);
+    function serializeCash(cashRegister: typeof currentCash | typeof lastClosedCash | null) {
+      if (!cashRegister) return null;
 
-    const ventas = cashRegister.movements
-      .filter((m) => m.type === CashMovementType.SALE)
-      .reduce((acc, m) => acc + Number(m.amount), 0);
-
-    const ingresos = cashRegister.movements
-      .filter((m) => m.type === CashMovementType.INCOME)
-      .reduce((acc, m) => acc + Number(m.amount), 0);
-
-    const egresos = cashRegister.movements
-      .filter((m) => m.type === CashMovementType.EXPENSE)
-      .reduce((acc, m) => acc + Number(m.amount), 0);
-
-    const expectedAmount = initialAmount + ventas + ingresos - egresos;
-    const finalAmount = cashRegister.finalAmount ? Number(cashRegister.finalAmount) : 0;
-    const difference = cashRegister.difference ? Number(cashRegister.difference) : 0;
-
-    return NextResponse.json({
-      ok: true,
-      isOpen: true,
-      cashRegister: {
+      return {
         ...cashRegister,
         sales: cashRegister.sales.map((sale) => ({
           id: sale.id,
@@ -108,16 +149,16 @@ export async function GET() {
           ...m,
           amount: Number(m.amount),
         })),
-      },
-      summary: {
-        initialAmount,
-        ingresos,
-        egresos,
-        ventas,
-        expectedAmount,
-        finalAmount,
-        difference,
-      },
+      };
+    }
+
+    return NextResponse.json({
+      ok: true,
+      isOpen: Boolean(currentCash),
+      cashRegister: serializeCash(currentCash),
+      summary: buildSummary(currentCash),
+      lastClosedCash: serializeCash(lastClosedCash),
+      lastClosedSummary: buildSummary(lastClosedCash),
     });
   } catch (error) {
     console.error("GET /api/admin/cash error:", error);
@@ -260,6 +301,7 @@ export async function POST(req: NextRequest) {
 
     if (action === "close") {
       const finalAmount = toDecimal(body.finalAmount);
+      const closeNotes = body.notes ? String(body.notes) : null;
 
       const initialAmount = Number(cashRegister.initialAmount);
 
@@ -295,6 +337,7 @@ export async function POST(req: NextRequest) {
           finalAmount,
           expectedAmount: new Prisma.Decimal(expectedAmount),
           difference: new Prisma.Decimal(difference),
+          notes: closeNotes || cashRegister.notes,
         },
       });
 
