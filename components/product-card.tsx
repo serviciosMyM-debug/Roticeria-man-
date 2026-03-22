@@ -5,6 +5,7 @@ import Link from "next/link";
 import { addToCart } from "@/lib/cart";
 import { formatCurrency } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
+import ProductPromoCountdown from "@/components/product-promo-countdown";
 
 type ProductCardProps = {
   product: {
@@ -14,6 +15,8 @@ type ProductCardProps = {
     shortDescription: string;
     price: any;
     promoPrice?: any;
+    promoStartsAt?: string | Date | null;
+    promoEndsAt?: string | Date | null;
     stock: number;
     imageUrl?: string | null;
     isPromo?: boolean;
@@ -21,8 +24,20 @@ type ProductCardProps = {
   };
 };
 
+function isPromoActive(product: ProductCardProps["product"]) {
+  if (!product.isPromo || !product.promoPrice) return false;
+  if (!product.promoStartsAt || !product.promoEndsAt) return true;
+
+  const now = Date.now();
+  const start = new Date(product.promoStartsAt).getTime();
+  const end = new Date(product.promoEndsAt).getTime();
+
+  return now >= start && now < end;
+}
+
 export function ProductCard({ product }: ProductCardProps) {
-  const finalPrice = Number(product.promoPrice ?? product.price);
+  const activePromo = isPromoActive(product);
+  const finalPrice = Number(activePromo ? product.promoPrice : product.price);
   const { showToast } = useToast();
 
   function handleAddToCart() {
@@ -77,6 +92,11 @@ export function ProductCard({ product }: ProductCardProps) {
           ) : null}
         </div>
 
+        <ProductPromoCountdown
+          startsAt={product.promoStartsAt}
+          endsAt={product.promoEndsAt}
+        />
+
         <div>
           <h3 className="text-xl font-black uppercase">{product.name}</h3>
           <p className="mt-1 text-sm text-zinc-600">
@@ -90,7 +110,7 @@ export function ProductCard({ product }: ProductCardProps) {
               {formatCurrency(finalPrice)}
             </p>
 
-            {product.promoPrice ? (
+            {activePromo && product.promoPrice ? (
               <p className="text-sm text-zinc-400 line-through">
                 {formatCurrency(Number(product.price))}
               </p>

@@ -17,6 +17,8 @@ export default function AdminLayout({
           <div className="grid gap-2">
             <AdminNavLink href="/admin">Dashboard</AdminNavLink>
             <AdminNavLink href="/admin/productos">Productos</AdminNavLink>
+            <AdminNavLink href="/admin/promos">Promos</AdminNavLink>
+            <AdminNavLink href="/admin/carga-masiva">Carga masiva</AdminNavLink>
             <AdminNavLink href="/admin/menu-diario">Menú del día</AdminNavLink>
             <AdminNavLink href="/admin/opiniones">Opiniones</AdminNavLink>
             <AdminNavLink href="/admin/caja">Caja</AdminNavLink>
