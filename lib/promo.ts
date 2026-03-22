@@ -1,3 +1,5 @@
+type NumericLike = number | string | { toString(): string } | null | undefined;
+
 export function toPromoTime(value?: string | Date | null) {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value);
@@ -7,7 +9,7 @@ export function toPromoTime(value?: string | Date | null) {
 
 export function getPromoState(product: {
   isPromo?: boolean | null;
-  promoPrice?: number | string | null;
+  promoPrice?: NumericLike;
   promoStartsAt?: string | Date | null;
   promoEndsAt?: string | Date | null;
 }) {
@@ -60,8 +62,8 @@ export function getPromoState(product: {
 }
 
 export function getEffectivePrice(product: {
-  price: number | string;
-  promoPrice?: number | string | null;
+  price: NumericLike;
+  promoPrice?: NumericLike;
   isPromo?: boolean | null;
   promoStartsAt?: string | Date | null;
   promoEndsAt?: string | Date | null;
