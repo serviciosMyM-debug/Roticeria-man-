@@ -1,53 +1,133 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { CashMovementType, PaymentMethod } from "@prisma/client";
-import { z } from "zod";
+import { Prisma } from "@prisma/client";
 
-const openSchema = z.object({
-  action: z.literal("open"),
-  initialAmount: z.coerce.number().min(0),
-  notes: z.string().optional(),
-});
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-const movementSchema = z.object({
-  action: z.literal("movement"),
-  type: z.enum(["INCOME", "EXPENSE"]),
-  amount: z.coerce.number().positive(),
-  method: z.enum(["CASH", "TRANSFER", "DEBIT", "CREDIT"]).optional(),
-  description: z.string().min(2),
-});
+function toDecimal(value: unknown) {
+  const num = Number(value ?? 0);
+  return new Prisma.Decimal(Number.isFinite(num) ? num : 0);
+}
 
-const closeSchema = z.object({
-  action: z.literal("close"),
-  finalAmount: z.coerce.number().min(0),
-  notes: z.string().optional(),
-});
+function formatOrderNumber(value?: number | null) {
+  if (!value || value <= 0) return "---";
+  return String(value).padStart(3, "0");
+}
 
 export async function GET() {
   try {
-    const current = await prisma.cashRegister.findFirst({
-      where: { isOpen: true },
+    const cashRegister = await prisma.cashRegister.findFirst({
+      where: {
+        isOpen: true,
+      },
+      orderBy: {
+        openedAt: "desc",
+      },
       include: {
         movements: {
-          orderBy: { createdAt: "desc" },
+          orderBy: {
+            createdAt: "desc",
+          },
         },
-        sales: true,
+        sales: {
+          orderBy: {
+            createdAt: "desc",
+          },
+          include: {
+            order: {
+              select: {
+                id: true,
+                dailyOrderNumber: true,
+                customer: {
+                  select: {
+                    name: true,
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     });
 
-    const history = await prisma.cashRegister.findMany({
-      take: 15,
-      orderBy: { openedAt: "desc" },
-      include: {
-        movements: true,
-        sales: true,
+    if (!cashRegister) {
+      return NextResponse.json({
+        ok: true,
+        isOpen: false,
+        cashRegister: null,
+        summary: {
+          initialAmount: 0,
+          ingresos: 0,
+          egresos: 0,
+          ventas: 0,
+          expectedAmount: 0,
+          finalAmount: 0,
+          difference: 0,
+        },
+      });
+    }
+
+    const initialAmount = Number(cashRegister.initialAmount);
+
+    const ventas = cashRegister.movements
+      .filter((m) => m.type === CashMovementType.SALE)
+      .reduce((acc, m) => acc + Number(m.amount), 0);
+
+    const ingresos = cashRegister.movements
+      .filter((m) => m.type === CashMovementType.INCOME)
+      .reduce((acc, m) => acc + Number(m.amount), 0);
+
+    const egresos = cashRegister.movements
+      .filter((m) => m.type === CashMovementType.EXPENSE)
+      .reduce((acc, m) => acc + Number(m.amount), 0);
+
+    const expectedAmount = initialAmount + ventas + ingresos - egresos;
+    const finalAmount = cashRegister.finalAmount ? Number(cashRegister.finalAmount) : 0;
+    const difference = cashRegister.difference ? Number(cashRegister.difference) : 0;
+
+    return NextResponse.json({
+      ok: true,
+      isOpen: true,
+      cashRegister: {
+        ...cashRegister,
+        sales: cashRegister.sales.map((sale) => ({
+          id: sale.id,
+          createdAt: sale.createdAt,
+          total: Number(sale.total),
+          paymentMethod: sale.paymentMethod,
+          order: {
+            id: sale.order.id,
+            dailyOrderNumber: sale.order.dailyOrderNumber,
+            displayNumber: formatOrderNumber(sale.order.dailyOrderNumber),
+            customerName: sale.order.customer.name,
+          },
+        })),
+        movements: cashRegister.movements.map((m) => ({
+          ...m,
+          amount: Number(m.amount),
+        })),
+      },
+      summary: {
+        initialAmount,
+        ingresos,
+        egresos,
+        ventas,
+        expectedAmount,
+        finalAmount,
+        difference,
       },
     });
-
-    return NextResponse.json({ current, history });
   } catch (error) {
+    console.error("GET /api/admin/cash error:", error);
+
     return NextResponse.json(
-      { error: "No se pudo obtener la caja", detail: String(error) },
+      {
+        ok: false,
+        error: "No se pudo obtener la caja",
+        detail: String(error),
+      },
       { status: 500 }
     );
   }
@@ -56,133 +136,188 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+    const action = String(body.action || "").trim().toLowerCase();
 
-    if (body.action === "open") {
-      const parsed = openSchema.parse(body);
+    if (!["open", "income", "expense", "close"].includes(action)) {
+      return NextResponse.json(
+        { ok: false, error: "Acción inválida" },
+        { status: 400 }
+      );
+    }
 
+    if (action === "open") {
       const existing = await prisma.cashRegister.findFirst({
         where: { isOpen: true },
       });
 
       if (existing) {
         return NextResponse.json(
-          { error: "Ya hay una caja abierta" },
+          { ok: false, error: "Ya hay una caja abierta." },
           { status: 400 }
         );
       }
 
-      const register = await prisma.cashRegister.create({
+      const initialAmount = toDecimal(body.initialAmount);
+
+      const cashRegister = await prisma.cashRegister.create({
         data: {
           openedAt: new Date(),
-          initialAmount: parsed.initialAmount,
+          initialAmount,
           isOpen: true,
-          notes: parsed.notes || null,
+          notes: body.notes ? String(body.notes) : null,
         },
       });
 
       await prisma.cashMovement.create({
         data: {
-          cashRegisterId: register.id,
+          cashRegisterId: cashRegister.id,
           type: CashMovementType.OPENING,
-          amount: parsed.initialAmount,
+          amount: initialAmount,
           description: "Apertura de caja",
         },
       });
 
-      return NextResponse.json({ ok: true, register });
+      return NextResponse.json({
+        ok: true,
+        message: "Caja abierta correctamente.",
+      });
     }
 
-    if (body.action === "movement") {
-      const parsed = movementSchema.parse(body);
+    const cashRegister = await prisma.cashRegister.findFirst({
+      where: { isOpen: true },
+      include: {
+        movements: true,
+      },
+      orderBy: {
+        openedAt: "desc",
+      },
+    });
 
-      const register = await prisma.cashRegister.findFirst({
-        where: { isOpen: true },
-      });
+    if (!cashRegister) {
+      return NextResponse.json(
+        { ok: false, error: "No hay una caja abierta." },
+        { status: 400 }
+      );
+    }
 
-      if (!register) {
+    if (action === "income") {
+      const amount = toDecimal(body.amount);
+      const description = String(body.description || "Ingreso manual");
+
+      if (Number(amount) <= 0) {
         return NextResponse.json(
-          { error: "No hay caja abierta" },
+          { ok: false, error: "El ingreso debe ser mayor a 0." },
           { status: 400 }
         );
       }
-
-      const movementType =
-        parsed.type === "INCOME"
-          ? CashMovementType.INCOME
-          : CashMovementType.EXPENSE;
-
-      const movement = await prisma.cashMovement.create({
-        data: {
-          cashRegisterId: register.id,
-          type: movementType,
-          amount: parsed.amount,
-          method: parsed.method ? (parsed.method as PaymentMethod) : null,
-          description: parsed.description,
-        },
-      });
-
-      return NextResponse.json({ ok: true, movement });
-    }
-
-    if (body.action === "close") {
-      const parsed = closeSchema.parse(body);
-
-      const register = await prisma.cashRegister.findFirst({
-        where: { isOpen: true },
-        include: { movements: true, sales: true },
-      });
-
-      if (!register) {
-        return NextResponse.json(
-          { error: "No hay caja abierta" },
-          { status: 400 }
-        );
-      }
-
-      let expected =
-        Number(register.initialAmount) +
-        register.movements.reduce((acc, m) => {
-          const amount = Number(m.amount);
-
-          if (m.type === "SALE" || m.type === "INCOME") return acc + amount;
-          if (m.type === "EXPENSE") return acc - amount;
-          return acc;
-        }, 0);
-
-      const difference = parsed.finalAmount - expected;
-
-      const updated = await prisma.cashRegister.update({
-        where: { id: register.id },
-        data: {
-          closedAt: new Date(),
-          finalAmount: parsed.finalAmount,
-          expectedAmount: expected,
-          difference,
-          isOpen: false,
-          notes: parsed.notes || register.notes,
-        },
-      });
 
       await prisma.cashMovement.create({
         data: {
-          cashRegisterId: register.id,
+          cashRegisterId: cashRegister.id,
+          type: CashMovementType.INCOME,
+          amount,
+          description,
+          method: body.method
+            ? (String(body.method).toUpperCase() as PaymentMethod)
+            : null,
+        },
+      });
+
+      return NextResponse.json({
+        ok: true,
+        message: "Ingreso registrado correctamente.",
+      });
+    }
+
+    if (action === "expense") {
+      const amount = toDecimal(body.amount);
+      const description = String(body.description || "Egreso manual");
+
+      if (Number(amount) <= 0) {
+        return NextResponse.json(
+          { ok: false, error: "El egreso debe ser mayor a 0." },
+          { status: 400 }
+        );
+      }
+
+      await prisma.cashMovement.create({
+        data: {
+          cashRegisterId: cashRegister.id,
+          type: CashMovementType.EXPENSE,
+          amount,
+          description,
+          method: body.method
+            ? (String(body.method).toUpperCase() as PaymentMethod)
+            : null,
+        },
+      });
+
+      return NextResponse.json({
+        ok: true,
+        message: "Egreso registrado correctamente.",
+      });
+    }
+
+    if (action === "close") {
+      const finalAmount = toDecimal(body.finalAmount);
+
+      const initialAmount = Number(cashRegister.initialAmount);
+
+      const ventas = cashRegister.movements
+        .filter((m) => m.type === CashMovementType.SALE)
+        .reduce((acc, m) => acc + Number(m.amount), 0);
+
+      const ingresos = cashRegister.movements
+        .filter((m) => m.type === CashMovementType.INCOME)
+        .reduce((acc, m) => acc + Number(m.amount), 0);
+
+      const egresos = cashRegister.movements
+        .filter((m) => m.type === CashMovementType.EXPENSE)
+        .reduce((acc, m) => acc + Number(m.amount), 0);
+
+      const expectedAmount = initialAmount + ventas + ingresos - egresos;
+      const difference = Number(finalAmount) - expectedAmount;
+
+      await prisma.cashMovement.create({
+        data: {
+          cashRegisterId: cashRegister.id,
           type: CashMovementType.CLOSING,
-          amount: parsed.finalAmount,
+          amount: finalAmount,
           description: "Cierre de caja",
         },
       });
 
-      return NextResponse.json({ ok: true, register: updated });
+      await prisma.cashRegister.update({
+        where: { id: cashRegister.id },
+        data: {
+          isOpen: false,
+          closedAt: new Date(),
+          finalAmount,
+          expectedAmount: new Prisma.Decimal(expectedAmount),
+          difference: new Prisma.Decimal(difference),
+        },
+      });
+
+      return NextResponse.json({
+        ok: true,
+        message: "Caja cerrada correctamente.",
+      });
     }
 
     return NextResponse.json(
-      { error: "Acción inválida" },
+      { ok: false, error: "Acción no soportada." },
       { status: 400 }
     );
   } catch (error) {
+    console.error("POST /api/admin/cash error:", error);
+
     return NextResponse.json(
-      { error: "No se pudo procesar la caja", detail: String(error) },
-      { status: 400 }
+      {
+        ok: false,
+        error: "No se pudo procesar la acción de caja",
+        detail: String(error),
+      },
+      { status: 500 }
     );
   }
 }
