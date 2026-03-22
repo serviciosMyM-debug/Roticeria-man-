@@ -48,8 +48,19 @@ export function ProductCard({ product }: ProductCardProps) {
 
   const promoEndMs = toPromoTime(product.promoEndsAt);
   const promoStartMs = toPromoTime(product.promoStartsAt);
-  const promo = useMemo(() => getPromoState(product), [product, now]);
-  const finalPrice = getEffectivePrice(product);
+  const normalizedProduct = {
+  ...product,
+  price: Number(product.price),
+  promoPrice:
+    product.promoPrice != null ? Number(product.promoPrice) : null,
+};
+
+const promo = useMemo(
+  () => getPromoState(normalizedProduct),
+  [normalizedProduct, now]
+);
+
+const finalPrice = getEffectivePrice(normalizedProduct);
 
   useEffect(() => {
     if (!product.isPromo) return;
