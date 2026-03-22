@@ -2,10 +2,16 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import CartIndicator from "@/components/cart-indicator";
 
 export default function MobilePublicNav() {
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     function handleResize() {
@@ -49,6 +55,88 @@ export default function MobilePublicNav() {
     setOpen(false);
   }
 
+  const overlay =
+    mounted && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            className={`fixed inset-0 z-[9999] md:hidden transition ${
+              open ? "pointer-events-auto" : "pointer-events-none"
+            }`}
+          >
+            <button
+              type="button"
+              aria-label="Cerrar menú"
+              onClick={closeMenu}
+              className={`absolute inset-0 bg-black/45 transition-opacity duration-300 ${
+                open ? "opacity-100" : "opacity-0"
+              }`}
+            />
+
+            <aside
+              className={`absolute right-0 top-0 h-full w-[85vw] max-w-[360px] bg-white shadow-2xl transition-transform duration-300 ease-out ${
+                open ? "translate-x-0" : "translate-x-full"
+              }`}
+            >
+              <div className="flex items-center justify-between border-b px-5 py-4">
+                <p className="text-lg font-black uppercase">Menú</p>
+
+                <button
+                  type="button"
+                  onClick={closeMenu}
+                  aria-label="Cerrar menú"
+                  className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border text-2xl font-bold"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="flex flex-col gap-2 px-4 py-4 text-base font-bold uppercase">
+                <Link
+                  href="/"
+                  onClick={closeMenu}
+                  className="rounded-xl px-4 py-3 transition hover:bg-zinc-100"
+                >
+                  Inicio
+                </Link>
+
+                <Link
+                  href="/menu"
+                  onClick={closeMenu}
+                  className="rounded-xl px-4 py-3 transition hover:bg-zinc-100"
+                >
+                  Productos
+                </Link>
+
+                <Link
+                  href="/menu#menu-del-dia"
+                  onClick={closeMenu}
+                  className="rounded-xl px-4 py-3 transition hover:bg-zinc-100"
+                >
+                  Menú del día
+                </Link>
+
+                <Link
+                  href="/carrito"
+                  onClick={closeMenu}
+                  className="rounded-xl px-4 py-3 transition hover:bg-zinc-100"
+                >
+                  Carrito
+                </Link>
+
+                <Link
+                  href="/admin"
+                  onClick={closeMenu}
+                  className="rounded-xl px-4 py-3 transition hover:bg-zinc-100"
+                >
+                  Admin
+                </Link>
+              </div>
+            </aside>
+          </div>,
+          document.body
+        )
+      : null;
+
   return (
     <div className="md:hidden">
       <div className="flex items-center gap-3">
@@ -78,81 +166,7 @@ export default function MobilePublicNav() {
         </button>
       </div>
 
-      <div
-        className={`fixed inset-0 z-[60] transition ${
-          open ? "pointer-events-auto" : "pointer-events-none"
-        }`}
-      >
-        <button
-          type="button"
-          aria-label="Cerrar menú"
-          onClick={closeMenu}
-          className={`absolute inset-0 bg-black/40 transition-opacity ${
-            open ? "opacity-100" : "opacity-0"
-          }`}
-        />
-
-        <aside
-          className={`absolute right-0 top-0 h-full w-[85vw] max-w-[360px] bg-white shadow-2xl transition-transform duration-300 ease-out ${
-            open ? "translate-x-0" : "translate-x-full"
-          }`}
-        >
-          <div className="flex items-center justify-between border-b px-5 py-4">
-            <p className="text-lg font-black uppercase">Menú</p>
-
-            <button
-              type="button"
-              onClick={closeMenu}
-              aria-label="Cerrar menú"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border text-xl font-bold"
-            >
-              ✕
-            </button>
-          </div>
-
-          <div className="flex flex-col gap-2 px-4 py-4 text-sm font-bold uppercase">
-            <Link
-              href="/"
-              onClick={closeMenu}
-              className="rounded-xl px-4 py-3 transition hover:bg-zinc-100"
-            >
-              Inicio
-            </Link>
-
-            <Link
-              href="/menu"
-              onClick={closeMenu}
-              className="rounded-xl px-4 py-3 transition hover:bg-zinc-100"
-            >
-              Productos
-            </Link>
-
-            <Link
-              href="/menu#menu-del-dia"
-              onClick={closeMenu}
-              className="rounded-xl px-4 py-3 transition hover:bg-zinc-100"
-            >
-              Menú del día
-            </Link>
-
-            <Link
-              href="/carrito"
-              onClick={closeMenu}
-              className="rounded-xl px-4 py-3 transition hover:bg-zinc-100"
-            >
-              Carrito
-            </Link>
-
-            <Link
-              href="/admin"
-              onClick={closeMenu}
-              className="rounded-xl px-4 py-3 transition hover:bg-zinc-100"
-            >
-              Admin
-            </Link>
-          </div>
-        </aside>
-      </div>
+      {overlay}
     </div>
   );
 }
