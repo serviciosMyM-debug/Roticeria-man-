@@ -1,11 +1,10 @@
-"use client";
+'use client';
 
-import Image from "next/image";
-import Link from "next/link";
-import { addToCart } from "@/lib/cart";
-import { formatCurrency } from "@/lib/utils";
-import { useToast } from "@/components/ui/toast";
-import ProductPromoCountdown from "@/components/product-promo-countdown";
+import Image from 'next/image';
+import Link from 'next/link';
+import { useCartStore } from '@/store/cart.store';
+import { formatCurrency } from '@/lib/utils';
+import { useEffect, useState } from 'react';
 
 type ProductCardProps = {
   product: {
@@ -15,8 +14,7 @@ type ProductCardProps = {
     shortDescription: string;
     price: any;
     promoPrice?: any;
-    promoStartsAt?: string | Date | null;
-    promoEndsAt?: string | Date | null;
+    promoEndsAt?: string | null;
     stock: number;
     imageUrl?: string | null;
     isPromo?: boolean;
@@ -24,51 +22,63 @@ type ProductCardProps = {
   };
 };
 
-function isPromoActive(product: ProductCardProps["product"]) {
-  if (!product.isPromo || !product.promoPrice) return false;
-  if (!product.promoStartsAt || !product.promoEndsAt) return true;
+function getTimeLeft(end?: string | null) {
+  if (!end) return null;
 
-  const now = Date.now();
-  const start = new Date(product.promoStartsAt).getTime();
-  const end = new Date(product.promoEndsAt).getTime();
+  const diff = new Date(end).getTime() - Date.now();
 
-  return now >= start && now < end;
+  if (diff <= 0) return null;
+
+  const hours = Math.floor(diff / 1000 / 60 / 60);
+  const minutes = Math.floor((diff / 1000 / 60) % 60);
+  const seconds = Math.floor((diff / 1000) % 60);
+
+  return `${hours}h ${minutes}m ${seconds}s`;
 }
 
 export function ProductCard({ product }: ProductCardProps) {
-  const activePromo = isPromoActive(product);
-  const finalPrice = Number(activePromo ? product.promoPrice : product.price);
-  const { showToast } = useToast();
+  const addItem = useCartStore((s) => s.addItem);
+  const [timeLeft, setTimeLeft] = useState<string | null>(null);
 
-  function handleAddToCart() {
-    addToCart({
-      productId: product.id,
-      name: product.name,
-      price: finalPrice,
-      quantity: 1,
-      stock: product.stock,
-      imageUrl: product.imageUrl ?? null,
-    });
+  const isPromoActive =
+    product.isPromo &&
+    product.promoPrice &&
+    product.promoEndsAt &&
+    new Date(product.promoEndsAt).getTime() > Date.now();
 
-    showToast({
-      type: "success",
-      title: "Producto agregado",
-      description: `${product.name} se agregó al carrito.`,
-    });
-  }
+  const finalPrice = Number(
+    isPromoActive ? product.promoPrice : product.price
+  );
+
+  useEffect(() => {
+    if (!isPromoActive) return;
+
+    const interval = setInterval(() => {
+      setTimeLeft(getTimeLeft(product.promoEndsAt));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [product.promoEndsAt, isPromoActive]);
 
   return (
-    <article className="card overflow-hidden">
+    <article className="card overflow-hidden relative">
       <div className="relative h-56">
         <Image
           src={
             product.imageUrl ||
-            "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1200&q=80"
+            'https://images.unsplash.com/photo-1504674900247-0877df9cc836'
           }
           alt={product.name}
           fill
           className="object-cover"
         />
+
+        {/* 🔥 CONTADOR PROMO */}
+        {isPromoActive && timeLeft && (
+          <div className="absolute top-3 left-3 bg-red-600 text-white px-3 py-1 rounded-full text-xs font-bold shadow">
+            ⏱ {timeLeft}
+          </div>
+        )}
       </div>
 
       <div className="space-y-4 p-5">
@@ -83,22 +93,23 @@ export function ProductCard({ product }: ProductCardProps) {
             </span>
           )}
 
-          {product.isPromo ? (
-            <span className="badge bg-brand/15 text-brand-dark">Promo</span>
-          ) : null}
+          {isPromoActive && (
+            <span className="badge bg-red-100 text-red-700">
+              PROMO 🔥
+            </span>
+          )}
 
-          {product.isDailyMenu ? (
-            <span className="badge bg-black text-white">Menú del día</span>
-          ) : null}
+          {product.isDailyMenu && (
+            <span className="badge bg-black text-white">
+              Menú del día
+            </span>
+          )}
         </div>
 
-        <ProductPromoCountdown
-          startsAt={product.promoStartsAt}
-          endsAt={product.promoEndsAt}
-        />
-
         <div>
-          <h3 className="text-xl font-black uppercase">{product.name}</h3>
+          <h3 className="text-xl font-black uppercase">
+            {product.name}
+          </h3>
           <p className="mt-1 text-sm text-zinc-600">
             {product.shortDescription}
           </p>
@@ -110,11 +121,11 @@ export function ProductCard({ product }: ProductCardProps) {
               {formatCurrency(finalPrice)}
             </p>
 
-            {activePromo && product.promoPrice ? (
+            {isPromoActive && (
               <p className="text-sm text-zinc-400 line-through">
                 {formatCurrency(Number(product.price))}
               </p>
-            ) : null}
+            )}
           </div>
 
           <div className="flex gap-2">
@@ -126,9 +137,18 @@ export function ProductCard({ product }: ProductCardProps) {
             </Link>
 
             <button
-              className="btn-primary px-4 py-2 disabled:cursor-not-allowed disabled:opacity-50"
+              className="btn-primary px-4 py-2 disabled:opacity-50"
               disabled={product.stock <= 0}
-              onClick={handleAddToCart}
+              onClick={() =>
+                addItem({
+                  id: product.id,
+                  slug: product.slug,
+                  name: product.name,
+                  price: finalPrice,
+                  imageUrl: product.imageUrl,
+                  stock: product.stock,
+                })
+              }
             >
               Agregar
             </button>
