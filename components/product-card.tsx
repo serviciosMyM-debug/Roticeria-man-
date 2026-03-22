@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { addToCart } from "@/lib/cart";
 import { formatCurrency } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
+import { getEffectivePrice, getPromoState, toPromoTime } from "@/lib/promo";
 
 type ProductCardProps = {
   product: {
@@ -23,13 +24,6 @@ type ProductCardProps = {
     isDailyMenu?: boolean;
   };
 };
-
-function toMs(value?: string | Date | null) {
-  if (!value) return null;
-  const date = value instanceof Date ? value : new Date(value);
-  const time = date.getTime();
-  return Number.isNaN(time) ? null : time;
-}
 
 function formatRemaining(ms: number) {
   if (ms <= 0) return "00:00:00";
@@ -52,32 +46,20 @@ export function ProductCard({ product }: ProductCardProps) {
   const { showToast } = useToast();
   const [now, setNow] = useState(Date.now());
 
-  const promoStartMs = toMs(product.promoStartsAt);
-  const promoEndMs = toMs(product.promoEndsAt);
+  const promoEndMs = toPromoTime(product.promoEndsAt);
+  const promoStartMs = toPromoTime(product.promoStartsAt);
+  const promo = useMemo(() => getPromoState(product), [product, now]);
+  const finalPrice = getEffectivePrice(product);
 
   useEffect(() => {
-    if (!product.isPromo || !promoEndMs) return;
+    if (!product.isPromo) return;
 
     const timer = setInterval(() => {
       setNow(Date.now());
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [product.isPromo, promoEndMs]);
-
-  const promoState = useMemo(() => {
-    if (!product.isPromo || !product.promoPrice) return "none";
-
-    if (!promoStartMs && !promoEndMs) return "active";
-
-    if (promoStartMs && now < promoStartMs) return "scheduled";
-    if (promoEndMs && now >= promoEndMs) return "ended";
-
-    return "active";
-  }, [product.isPromo, product.promoPrice, promoStartMs, promoEndMs, now]);
-
-  const isPromoActive = promoState === "active";
-  const finalPrice = Number(isPromoActive ? product.promoPrice : product.price);
+  }, [product.isPromo]);
 
   function handleAddToCart() {
     addToCart({
@@ -109,13 +91,13 @@ export function ProductCard({ product }: ProductCardProps) {
           className="object-cover"
         />
 
-        {isPromoActive && promoEndMs && (
+        {promo.active && promoEndMs && (
           <div className="absolute left-3 top-3 rounded-full bg-red-600 px-3 py-1 text-xs font-bold uppercase text-white shadow-lg">
             ⏱ {formatRemaining(promoEndMs - now)}
           </div>
         )}
 
-        {promoState === "scheduled" && promoStartMs && (
+        {promo.scheduled && promoStartMs && (
           <div className="absolute left-3 top-3 rounded-full bg-zinc-900 px-3 py-1 text-xs font-bold uppercase text-white shadow-lg">
             Arranca en {formatRemaining(promoStartMs - now)}
           </div>
@@ -134,8 +116,10 @@ export function ProductCard({ product }: ProductCardProps) {
             </span>
           )}
 
-          {product.isPromo ? (
-            <span className="badge bg-red-100 text-red-700">Promo</span>
+          {promo.active ? (
+            <span className="badge bg-red-100 text-red-700">Promo activa</span>
+          ) : promo.scheduled ? (
+            <span className="badge bg-amber-100 text-amber-700">Promo programada</span>
           ) : null}
 
           {product.isDailyMenu ? (
@@ -156,7 +140,7 @@ export function ProductCard({ product }: ProductCardProps) {
               {formatCurrency(finalPrice)}
             </p>
 
-            {isPromoActive && product.promoPrice ? (
+            {promo.active && product.promoPrice ? (
               <p className="text-sm text-zinc-400 line-through">
                 {formatCurrency(Number(product.price))}
               </p>
