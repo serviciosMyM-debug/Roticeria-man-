@@ -1,10 +1,11 @@
-'use client';
+"use client";
 
-import Image from 'next/image';
-import Link from 'next/link';
-import { useCartStore } from '@/store/cart.store';
-import { formatCurrency } from '@/lib/utils';
-import { useEffect, useState } from 'react';
+import Image from "next/image";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { addToCart } from "@/lib/cart";
+import { formatCurrency } from "@/lib/utils";
+import { useToast } from "@/components/ui/toast";
 
 type ProductCardProps = {
   product: {
@@ -14,7 +15,8 @@ type ProductCardProps = {
     shortDescription: string;
     price: any;
     promoPrice?: any;
-    promoEndsAt?: string | null;
+    promoStartsAt?: string | Date | null;
+    promoEndsAt?: string | Date | null;
     stock: number;
     imageUrl?: string | null;
     isPromo?: boolean;
@@ -22,61 +24,100 @@ type ProductCardProps = {
   };
 };
 
-function getTimeLeft(end?: string | null) {
-  if (!end) return null;
+function toMs(value?: string | Date | null) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  const time = date.getTime();
+  return Number.isNaN(time) ? null : time;
+}
 
-  const diff = new Date(end).getTime() - Date.now();
+function formatRemaining(ms: number) {
+  if (ms <= 0) return "00:00:00";
 
-  if (diff <= 0) return null;
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600)
+    .toString()
+    .padStart(2, "0");
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+    .toString()
+    .padStart(2, "0");
+  const seconds = Math.floor(totalSeconds % 60)
+    .toString()
+    .padStart(2, "0");
 
-  const hours = Math.floor(diff / 1000 / 60 / 60);
-  const minutes = Math.floor((diff / 1000 / 60) % 60);
-  const seconds = Math.floor((diff / 1000) % 60);
-
-  return `${hours}h ${minutes}m ${seconds}s`;
+  return `${hours}:${minutes}:${seconds}`;
 }
 
 export function ProductCard({ product }: ProductCardProps) {
-  const addItem = useCartStore((s) => s.addItem);
-  const [timeLeft, setTimeLeft] = useState<string | null>(null);
+  const { showToast } = useToast();
+  const [now, setNow] = useState(Date.now());
 
-  const isPromoActive =
-    product.isPromo &&
-    product.promoPrice &&
-    product.promoEndsAt &&
-    new Date(product.promoEndsAt).getTime() > Date.now();
-
-  const finalPrice = Number(
-    isPromoActive ? product.promoPrice : product.price
-  );
+  const promoStartMs = toMs(product.promoStartsAt);
+  const promoEndMs = toMs(product.promoEndsAt);
 
   useEffect(() => {
-    if (!isPromoActive) return;
+    if (!product.isPromo || !promoEndMs) return;
 
-    const interval = setInterval(() => {
-      setTimeLeft(getTimeLeft(product.promoEndsAt));
+    const timer = setInterval(() => {
+      setNow(Date.now());
     }, 1000);
 
-    return () => clearInterval(interval);
-  }, [product.promoEndsAt, isPromoActive]);
+    return () => clearInterval(timer);
+  }, [product.isPromo, promoEndMs]);
+
+  const promoState = useMemo(() => {
+    if (!product.isPromo || !product.promoPrice) return "none";
+
+    if (!promoStartMs && !promoEndMs) return "active";
+
+    if (promoStartMs && now < promoStartMs) return "scheduled";
+    if (promoEndMs && now >= promoEndMs) return "ended";
+
+    return "active";
+  }, [product.isPromo, product.promoPrice, promoStartMs, promoEndMs, now]);
+
+  const isPromoActive = promoState === "active";
+  const finalPrice = Number(isPromoActive ? product.promoPrice : product.price);
+
+  function handleAddToCart() {
+    addToCart({
+      productId: product.id,
+      name: product.name,
+      price: finalPrice,
+      quantity: 1,
+      stock: product.stock,
+      imageUrl: product.imageUrl ?? null,
+    });
+
+    showToast({
+      type: "success",
+      title: "Producto agregado",
+      description: `${product.name} se agregó al carrito.`,
+    });
+  }
 
   return (
-    <article className="card overflow-hidden relative">
+    <article className="card overflow-hidden">
       <div className="relative h-56">
         <Image
           src={
             product.imageUrl ||
-            'https://images.unsplash.com/photo-1504674900247-0877df9cc836'
+            "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1200&q=80"
           }
           alt={product.name}
           fill
           className="object-cover"
         />
 
-        {/* 🔥 CONTADOR PROMO */}
-        {isPromoActive && timeLeft && (
-          <div className="absolute top-3 left-3 bg-red-600 text-white px-3 py-1 rounded-full text-xs font-bold shadow">
-            ⏱ {timeLeft}
+        {isPromoActive && promoEndMs && (
+          <div className="absolute left-3 top-3 rounded-full bg-red-600 px-3 py-1 text-xs font-bold uppercase text-white shadow-lg">
+            ⏱ {formatRemaining(promoEndMs - now)}
+          </div>
+        )}
+
+        {promoState === "scheduled" && promoStartMs && (
+          <div className="absolute left-3 top-3 rounded-full bg-zinc-900 px-3 py-1 text-xs font-bold uppercase text-white shadow-lg">
+            Arranca en {formatRemaining(promoStartMs - now)}
           </div>
         )}
       </div>
@@ -93,23 +134,17 @@ export function ProductCard({ product }: ProductCardProps) {
             </span>
           )}
 
-          {isPromoActive && (
-            <span className="badge bg-red-100 text-red-700">
-              PROMO 🔥
-            </span>
-          )}
+          {product.isPromo ? (
+            <span className="badge bg-red-100 text-red-700">Promo</span>
+          ) : null}
 
-          {product.isDailyMenu && (
-            <span className="badge bg-black text-white">
-              Menú del día
-            </span>
-          )}
+          {product.isDailyMenu ? (
+            <span className="badge bg-black text-white">Menú del día</span>
+          ) : null}
         </div>
 
         <div>
-          <h3 className="text-xl font-black uppercase">
-            {product.name}
-          </h3>
+          <h3 className="text-xl font-black uppercase">{product.name}</h3>
           <p className="mt-1 text-sm text-zinc-600">
             {product.shortDescription}
           </p>
@@ -121,11 +156,11 @@ export function ProductCard({ product }: ProductCardProps) {
               {formatCurrency(finalPrice)}
             </p>
 
-            {isPromoActive && (
+            {isPromoActive && product.promoPrice ? (
               <p className="text-sm text-zinc-400 line-through">
                 {formatCurrency(Number(product.price))}
               </p>
-            )}
+            ) : null}
           </div>
 
           <div className="flex gap-2">
@@ -137,18 +172,9 @@ export function ProductCard({ product }: ProductCardProps) {
             </Link>
 
             <button
-              className="btn-primary px-4 py-2 disabled:opacity-50"
+              className="btn-primary px-4 py-2 disabled:cursor-not-allowed disabled:opacity-50"
               disabled={product.stock <= 0}
-              onClick={() =>
-                addItem({
-                  id: product.id,
-                  slug: product.slug,
-                  name: product.name,
-                  price: finalPrice,
-                  imageUrl: product.imageUrl,
-                  stock: product.stock,
-                })
-              }
+              onClick={handleAddToCart}
             >
               Agregar
             </button>
