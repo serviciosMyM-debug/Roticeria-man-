@@ -80,18 +80,28 @@ function toDatetimeLocal(value?: string | null) {
 
 function localInputToIso(value: string) {
   if (!value) return null;
-  return new Date(value).toISOString();
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
 }
 
-function isPromoRunning(product: Product) {
-  if (!product.isPromo || !product.promoPrice) return false;
-  if (!product.promoStartsAt || !product.promoEndsAt) return true;
+function getPromoStatus(product: Product) {
+  if (!product.isPromo || product.promoPrice == null) {
+    return "none";
+  }
 
   const now = Date.now();
-  const start = new Date(product.promoStartsAt).getTime();
-  const end = new Date(product.promoEndsAt).getTime();
+  const start = product.promoStartsAt
+    ? new Date(product.promoStartsAt).getTime()
+    : null;
+  const end = product.promoEndsAt
+    ? new Date(product.promoEndsAt).getTime()
+    : null;
 
-  return now >= start && now < end;
+  if (!start && !end) return "active";
+  if (start && now < start) return "scheduled";
+  if (end && now >= end) return "ended";
+  return "active";
 }
 
 export default function AdminProductosPage() {
@@ -127,7 +137,14 @@ export default function AdminProductosPage() {
         throw new Error(categoriesData.error || "No se pudieron cargar las categorías");
       }
 
-      setProducts(productsData || []);
+      const normalizedProducts = (productsData || []).map((product: any) => ({
+        ...product,
+        price: Number(product.price),
+        promoPrice:
+          product.promoPrice != null ? Number(product.promoPrice) : null,
+      }));
+
+      setProducts(normalizedProducts);
       setCategories(categoriesData || []);
     } catch (error: any) {
       showToast({
@@ -532,6 +549,7 @@ export default function AdminProductosPage() {
               <th className="p-4 text-left font-bold uppercase">Categoría</th>
               <th className="p-4 text-left font-bold uppercase">Precio</th>
               <th className="p-4 text-left font-bold uppercase">Promo</th>
+              <th className="p-4 text-left font-bold uppercase">Debug fechas</th>
               <th className="p-4 text-left font-bold uppercase">Stock</th>
               <th className="p-4 text-left font-bold uppercase">Estado</th>
               <th className="p-4 text-left font-bold uppercase">Acciones</th>
@@ -541,13 +559,13 @@ export default function AdminProductosPage() {
           <tbody>
             {products.length === 0 ? (
               <tr>
-                <td colSpan={7} className="p-6 text-center text-zinc-500">
+                <td colSpan={8} className="p-6 text-center text-zinc-500">
                   No hay productos cargados.
                 </td>
               </tr>
             ) : (
               products.map((product) => {
-                const promoRunning = isPromoRunning(product);
+                const promoStatus = getPromoStatus(product);
 
                 return (
                   <tr key={product.id} className="border-t border-zinc-200 align-top">
@@ -565,7 +583,7 @@ export default function AdminProductosPage() {
                         <p className="font-semibold">
                           ${Number(product.price).toFixed(2)}
                         </p>
-                        {promoRunning && product.promoPrice != null ? (
+                        {promoStatus === "active" && product.promoPrice != null ? (
                           <p className="text-sm text-red-600">
                             Promo: ${Number(product.promoPrice).toFixed(2)}
                           </p>
@@ -578,10 +596,16 @@ export default function AdminProductosPage() {
                         <div className="space-y-1">
                           <p className="font-semibold">Activa</p>
                           <p className="text-xs text-zinc-500">
-                            Inicio: {product.promoStartsAt ? new Date(product.promoStartsAt).toLocaleString() : "-"}
+                            Inicio visible:{" "}
+                            {product.promoStartsAt
+                              ? new Date(product.promoStartsAt).toLocaleString()
+                              : "-"}
                           </p>
                           <p className="text-xs text-zinc-500">
-                            Fin: {product.promoEndsAt ? new Date(product.promoEndsAt).toLocaleString() : "-"}
+                            Fin visible:{" "}
+                            {product.promoEndsAt
+                              ? new Date(product.promoEndsAt).toLocaleString()
+                              : "-"}
                           </p>
                         </div>
                       ) : (
@@ -589,18 +613,31 @@ export default function AdminProductosPage() {
                       )}
                     </td>
 
+                    <td className="p-4">
+                      <div className="space-y-1 text-xs text-zinc-500">
+                        <p>promoPrice: {String(product.promoPrice)}</p>
+                        <p>start raw: {product.promoStartsAt || "-"}</p>
+                        <p>end raw: {product.promoEndsAt || "-"}</p>
+                        <p>status: {promoStatus}</p>
+                      </div>
+                    </td>
+
                     <td className="p-4">{product.stock}</td>
 
                     <td className="p-4">
                       <div className="space-y-1">
                         <p>{product.isActive ? "Activo" : "Inactivo"}</p>
-                        {promoRunning ? (
+                        {promoStatus === "active" ? (
                           <span className="inline-flex rounded-full bg-red-100 px-3 py-1 text-xs font-bold uppercase text-red-700">
                             Promo corriendo
                           </span>
-                        ) : product.isPromo ? (
+                        ) : promoStatus === "scheduled" ? (
                           <span className="inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs font-bold uppercase text-amber-700">
                             Promo programada
+                          </span>
+                        ) : promoStatus === "ended" ? (
+                          <span className="inline-flex rounded-full bg-zinc-200 px-3 py-1 text-xs font-bold uppercase text-zinc-700">
+                            Promo vencida
                           </span>
                         ) : null}
                       </div>
