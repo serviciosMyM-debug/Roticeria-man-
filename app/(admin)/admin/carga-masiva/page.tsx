@@ -1,81 +1,65 @@
-import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { manaBulkProducts } from "@/lib/mana-menu-bulk";
+"use client";
 
-function slugify(text: string) {
-  return text
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9\s-]/g, "")
-    .trim()
-    .replace(/\s+/g, "-");
-}
+import { useState } from "react";
+import { useToast } from "@/components/ui/toast";
 
-export async function POST() {
-  try {
-    for (const item of manaBulkProducts) {
-      const categorySlug = slugify(item.category);
+export default function AdminCargaMasivaPage() {
+  const [loading, setLoading] = useState(false);
+  const { showToast } = useToast();
 
-      let category = await prisma.category.findUnique({
-        where: { slug: categorySlug },
+  async function handleImport() {
+    try {
+      setLoading(true);
+
+      const res = await fetch("/api/admin/productos/bulk", {
+        method: "POST",
       });
 
-      if (!category) {
-        category = await prisma.category.create({
-          data: {
-            name: item.category,
-            slug: categorySlug,
-          },
-        });
+      const data = await res.json();
+
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || "No se pudo importar");
       }
 
-      const productSlug = slugify(item.name);
-
-      const existing = await prisma.product.findUnique({
-        where: { slug: productSlug },
+      showToast({
+        type: "success",
+        title: "Carga masiva lista",
+        description: "Se cargaron los productos del menú visual.",
       });
-
-      if (existing) continue;
-
-      const created = await prisma.product.create({
-        data: {
-          name: item.name,
-          slug: productSlug,
-          shortDescription: item.name,
-          description: item.name,
-          price: item.price,
-          stock: item.stock,
-          categoryId: category.id,
-          isActive: true,
-          isFeatured: false,
-          isPromo: false,
-          isDailyMenu: false,
-        },
+    } catch (error: any) {
+      showToast({
+        type: "error",
+        title: "Error",
+        description: error.message || "No se pudo importar",
       });
-
-      await prisma.stockMovement.create({
-        data: {
-          productId: created.id,
-          type: "INITIAL_LOAD",
-          quantity: item.stock,
-          note: "Carga masiva desde menú visual",
-        },
-      });
+    } finally {
+      setLoading(false);
     }
-
-    return NextResponse.json({
-      ok: true,
-      message: "Carga masiva completada.",
-    });
-  } catch (error) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: "No se pudo completar la carga masiva",
-        detail: String(error),
-      },
-      { status: 500 }
-    );
   }
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-5xl font-black uppercase">Carga masiva</h1>
+        <p className="mt-2 text-lg text-zinc-600">
+          Importa de una sola vez los productos levantados del menú visual.
+        </p>
+      </div>
+
+      <div className="rounded-3xl bg-white p-6 shadow-sm">
+        <p className="text-zinc-700">
+          Esta carga crea categorías faltantes y agrega productos solo si todavía no existen.
+        </p>
+
+        <button
+          type="button"
+          disabled={loading}
+          onClick={handleImport}
+          className="mt-6 rounded-2xl bg-amber-500 px-6 py-4 font-bold uppercase text-white disabled:opacity-50"
+        >
+          {loading ? "Importando..." : "Importar menú de Mana"}
+        </button>
+      </div>
+    </div>
+  );
 }
