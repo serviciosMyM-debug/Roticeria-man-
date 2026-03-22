@@ -78,6 +78,11 @@ function toDatetimeLocal(value?: string | null) {
   return local.toISOString().slice(0, 16);
 }
 
+function localInputToIso(value: string) {
+  if (!value) return null;
+  return new Date(value).toISOString();
+}
+
 function isPromoRunning(product: Product) {
   if (!product.isPromo || !product.promoPrice) return false;
   if (!product.promoStartsAt || !product.promoEndsAt) return true;
@@ -260,8 +265,12 @@ export default function AdminProductosPage() {
         description: form.description,
         price: Number(form.price || 0),
         promoPrice: form.promoPrice ? Number(form.promoPrice) : null,
-        promoStartsAt: form.promoStartsAt || null,
-        promoEndsAt: form.promoEndsAt || null,
+        promoStartsAt: form.promoStartsAt
+          ? localInputToIso(form.promoStartsAt)
+          : null,
+        promoEndsAt: form.promoEndsAt
+          ? localInputToIso(form.promoEndsAt)
+          : null,
         stock: Number(form.stock || 0),
         lowStockAlert: Number(form.lowStockAlert || 0),
         imageUrl: form.imageUrl || null,

@@ -22,6 +22,20 @@ type Product = {
   isDailyMenu: boolean;
 };
 
+function toDatetimeLocal(value?: string | null) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  const offset = d.getTimezoneOffset();
+  const local = new Date(d.getTime() - offset * 60000);
+  return local.toISOString().slice(0, 16);
+}
+
+function localInputToIso(value: string) {
+  if (!value) return null;
+  return new Date(value).toISOString();
+}
+
 export default function AdminPromosPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -47,28 +61,34 @@ export default function AdminPromosPage() {
     try {
       setSavingId(product.id);
 
+      const payload = {
+        name: product.name,
+        shortDescription: product.shortDescription,
+        description: product.description,
+        price: Number(product.price),
+        promoPrice: product.promoPrice ? Number(product.promoPrice) : null,
+        promoStartsAt: product.promoStartsAt
+          ? localInputToIso(product.promoStartsAt)
+          : null,
+        promoEndsAt: product.promoEndsAt
+          ? localInputToIso(product.promoEndsAt)
+          : null,
+        stock: Number(product.stock),
+        lowStockAlert: Number(product.lowStockAlert),
+        imageUrl: product.imageUrl || null,
+        categoryId: product.categoryId,
+        isActive: product.isActive,
+        isFeatured: product.isFeatured,
+        isPromo: product.isPromo,
+        isDailyMenu: product.isDailyMenu,
+      };
+
       const res = await fetch(`/api/admin/productos/${product.id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          name: product.name,
-          shortDescription: product.shortDescription,
-          description: product.description,
-          price: Number(product.price),
-          promoPrice: product.promoPrice ? Number(product.promoPrice) : null,
-          promoStartsAt: product.promoStartsAt || null,
-          promoEndsAt: product.promoEndsAt || null,
-          stock: Number(product.stock),
-          lowStockAlert: Number(product.lowStockAlert),
-          imageUrl: product.imageUrl || null,
-          categoryId: product.categoryId,
-          isActive: product.isActive,
-          isFeatured: product.isFeatured,
-          isPromo: product.isPromo,
-          isDailyMenu: product.isDailyMenu,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
@@ -132,11 +152,7 @@ export default function AdminPromosPage() {
 
               <input
                 type="datetime-local"
-                value={
-                  product.promoStartsAt
-                    ? new Date(product.promoStartsAt).toISOString().slice(0, 16)
-                    : ""
-                }
+                value={toDatetimeLocal(product.promoStartsAt)}
                 onChange={(e) =>
                   updateLocal(product.id, "promoStartsAt", e.target.value || null)
                 }
@@ -145,11 +161,7 @@ export default function AdminPromosPage() {
 
               <input
                 type="datetime-local"
-                value={
-                  product.promoEndsAt
-                    ? new Date(product.promoEndsAt).toISOString().slice(0, 16)
-                    : ""
-                }
+                value={toDatetimeLocal(product.promoEndsAt)}
                 onChange={(e) =>
                   updateLocal(product.id, "promoEndsAt", e.target.value || null)
                 }
