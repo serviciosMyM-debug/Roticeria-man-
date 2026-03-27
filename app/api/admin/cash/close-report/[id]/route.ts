@@ -123,20 +123,23 @@ export async function GET(_: NextRequest, { params }: Params) {
 
     const chunks: Buffer[] = [];
 
-    const pdfReady = new Promise<Uint8Array>((resolve, reject) => {
+    const pdfReady = new Promise<ArrayBuffer>((resolve, reject) => {
       doc.on("data", (chunk: Buffer | Uint8Array) => {
         chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
       });
 
       doc.on("end", () => {
         const pdfBuffer = Buffer.concat(chunks);
-        resolve(new Uint8Array(pdfBuffer));
+        const arrayBuffer = pdfBuffer.buffer.slice(
+          pdfBuffer.byteOffset,
+          pdfBuffer.byteOffset + pdfBuffer.byteLength
+        ) as ArrayBuffer;
+        resolve(arrayBuffer);
       });
 
       doc.on("error", reject);
     });
 
-    // Header
     doc.font("Helvetica-Bold").fontSize(22).text("Resumen de cierre de caja");
     doc.moveDown(0.3);
 
@@ -147,7 +150,6 @@ export async function GET(_: NextRequest, { params }: Params) {
     doc.text(`Observación: ${cashRegister.notes || "-"}`);
     doc.moveDown();
 
-    // Resumen
     doc.font("Helvetica-Bold").fontSize(16).text("Resumen general");
     doc.moveDown(0.5);
 
@@ -161,7 +163,6 @@ export async function GET(_: NextRequest, { params }: Params) {
     doc.text(`Diferencia: ${money(summary.difference)}`);
     doc.moveDown();
 
-    // Lectura
     doc.font("Helvetica-Bold").fontSize(16).text("Lectura del cierre");
     doc.moveDown(0.5);
 
@@ -175,7 +176,6 @@ export async function GET(_: NextRequest, { params }: Params) {
     }
     doc.moveDown();
 
-    // Ventas
     doc.font("Helvetica-Bold").fontSize(16).text("Ventas por pedido");
     doc.moveDown(0.5);
 
@@ -188,9 +188,10 @@ export async function GET(_: NextRequest, { params }: Params) {
         const total = num(sale.total);
         const paymentMethod = sale.paymentMethod || "-";
 
-        doc.font("Helvetica-Bold").fontSize(11).text(
-          `${index + 1}. Pedido ${orderNumber} - ${customerName}`
-        );
+        doc
+          .font("Helvetica-Bold")
+          .fontSize(11)
+          .text(`${index + 1}. Pedido ${orderNumber} - ${customerName}`);
         doc.font("Helvetica");
         doc.text(`Fecha: ${formatDate(sale.createdAt)}`);
         doc.text(`Medio de pago: ${paymentMethod}`);
@@ -201,7 +202,6 @@ export async function GET(_: NextRequest, { params }: Params) {
 
     doc.moveDown();
 
-    // Movimientos
     doc.font("Helvetica-Bold").fontSize(16).text("Movimientos de caja");
     doc.moveDown(0.5);
 
@@ -227,9 +227,9 @@ export async function GET(_: NextRequest, { params }: Params) {
 
     doc.end();
 
-    const pdfBytes = await pdfReady;
+    const pdfArrayBuffer = await pdfReady;
 
-    return new Response(pdfBytes, {
+    return new Response(pdfArrayBuffer, {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
