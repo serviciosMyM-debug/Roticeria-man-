@@ -123,18 +123,13 @@ export async function GET(_: NextRequest, { params }: Params) {
 
     const chunks: Buffer[] = [];
 
-    const pdfReady = new Promise<ArrayBuffer>((resolve, reject) => {
+    const pdfReady = new Promise<Buffer>((resolve, reject) => {
       doc.on("data", (chunk: Buffer | Uint8Array) => {
         chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
       });
 
       doc.on("end", () => {
-        const pdfBuffer = Buffer.concat(chunks);
-        const arrayBuffer = pdfBuffer.buffer.slice(
-          pdfBuffer.byteOffset,
-          pdfBuffer.byteOffset + pdfBuffer.byteLength
-        ) as ArrayBuffer;
-        resolve(arrayBuffer);
+        resolve(Buffer.concat(chunks));
       });
 
       doc.on("error", reject);
@@ -227,9 +222,9 @@ export async function GET(_: NextRequest, { params }: Params) {
 
     doc.end();
 
-    const pdfArrayBuffer = await pdfReady;
+    const pdfBuffer = await pdfReady;
 
-    return new Response(pdfArrayBuffer, {
+    return new Response(pdfBuffer as unknown as BodyInit, {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
