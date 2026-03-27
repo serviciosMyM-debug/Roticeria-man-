@@ -10,7 +10,8 @@ type Params = {
 };
 
 function money(value: number) {
-  return `$ ${value.toFixed(2)}`;
+  const safe = Number.isFinite(value) ? value : 0;
+  return `$ ${safe.toFixed(2)}`;
 }
 
 function formatDate(value?: string | Date | null) {
@@ -25,29 +26,34 @@ function fmtOrder(value?: number | null) {
   return String(value).padStart(3, "0");
 }
 
+function num(value: unknown) {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 function calcSummary(cashRegister: {
-  initialAmount: any;
-  finalAmount: any;
-  expectedAmount: any;
-  difference: any;
-  movements: Array<{ type: string; amount: any }>;
+  initialAmount: unknown;
+  finalAmount: unknown;
+  expectedAmount: unknown;
+  difference: unknown;
+  movements: Array<{ type: string; amount: unknown }>;
 }) {
-  const initialAmount = Number(cashRegister.initialAmount || 0);
-  const finalAmount = Number(cashRegister.finalAmount || 0);
-  const expectedAmount = Number(cashRegister.expectedAmount || 0);
-  const difference = Number(cashRegister.difference || 0);
+  const initialAmount = num(cashRegister.initialAmount);
+  const finalAmount = num(cashRegister.finalAmount);
+  const expectedAmount = num(cashRegister.expectedAmount);
+  const difference = num(cashRegister.difference);
 
   const ventas = cashRegister.movements
     .filter((m) => m.type === "SALE")
-    .reduce((acc, m) => acc + Number(m.amount || 0), 0);
+    .reduce((acc, m) => acc + num(m.amount), 0);
 
   const ingresos = cashRegister.movements
     .filter((m) => m.type === "INCOME")
-    .reduce((acc, m) => acc + Number(m.amount || 0), 0);
+    .reduce((acc, m) => acc + num(m.amount), 0);
 
   const egresos = cashRegister.movements
     .filter((m) => m.type === "EXPENSE")
-    .reduce((acc, m) => acc + Number(m.amount || 0), 0);
+    .reduce((acc, m) => acc + num(m.amount), 0);
 
   return {
     initialAmount,
@@ -95,7 +101,16 @@ export async function GET(_: NextRequest, { params }: Params) {
       return new Response("La caja todavía está abierta", { status: 400 });
     }
 
-    const summary = calcSummary(cashRegister);
+    const summary = calcSummary({
+      initialAmount: cashRegister.initialAmount,
+      finalAmount: cashRegister.finalAmount,
+      expectedAmount: cashRegister.expectedAmount,
+      difference: cashRegister.difference,
+      movements: cashRegister.movements.map((m) => ({
+        type: String(m.type),
+        amount: m.amount,
+      })),
+    });
 
     const doc = new PDFDocument({
       size: "A4",
@@ -106,26 +121,37 @@ export async function GET(_: NextRequest, { params }: Params) {
       },
     });
 
-    const chunks: Uint8Array[] = [];
-    doc.on("data", (chunk) => chunks.push(chunk));
+    const chunks: Buffer[] = [];
 
-    const pdfReady = new Promise<Buffer>((resolve, reject) => {
-      doc.on("end", () => resolve(Buffer.concat(chunks)));
+    const pdfReady = new Promise<Uint8Array>((resolve, reject) => {
+      doc.on("data", (chunk: Buffer | Uint8Array) => {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      });
+
+      doc.on("end", () => {
+        const pdfBuffer = Buffer.concat(chunks);
+        resolve(new Uint8Array(pdfBuffer));
+      });
+
       doc.on("error", reject);
     });
 
-    doc.fontSize(22).font("Helvetica-Bold").text("Resumen de cierre de caja");
+    // Header
+    doc.font("Helvetica-Bold").fontSize(22).text("Resumen de cierre de caja");
     doc.moveDown(0.3);
-    doc.fontSize(12).font("Helvetica");
+
+    doc.font("Helvetica").fontSize(12);
     doc.text(`ID de caja: ${cashRegister.id}`);
     doc.text(`Apertura: ${formatDate(cashRegister.openedAt)}`);
     doc.text(`Cierre: ${formatDate(cashRegister.closedAt)}`);
     doc.text(`Observación: ${cashRegister.notes || "-"}`);
     doc.moveDown();
 
-    doc.fontSize(16).font("Helvetica-Bold").text("Resumen general");
+    // Resumen
+    doc.font("Helvetica-Bold").fontSize(16).text("Resumen general");
     doc.moveDown(0.5);
-    doc.fontSize(11).font("Helvetica");
+
+    doc.font("Helvetica").fontSize(11);
     doc.text(`Monto inicial: ${money(summary.initialAmount)}`);
     doc.text(`Ventas confirmadas: ${money(summary.ventas)}`);
     doc.text(`Ingresos manuales: ${money(summary.ingresos)}`);
@@ -135,9 +161,11 @@ export async function GET(_: NextRequest, { params }: Params) {
     doc.text(`Diferencia: ${money(summary.difference)}`);
     doc.moveDown();
 
-    doc.fontSize(16).font("Helvetica-Bold").text("Lectura del cierre");
+    // Lectura
+    doc.font("Helvetica-Bold").fontSize(16).text("Lectura del cierre");
     doc.moveDown(0.5);
-    doc.fontSize(11).font("Helvetica");
+
+    doc.font("Helvetica").fontSize(11);
     if (summary.difference === 0) {
       doc.text("La caja cerró exacta. No hubo diferencia entre lo esperado y lo contado.");
     } else if (summary.difference > 0) {
@@ -147,43 +175,44 @@ export async function GET(_: NextRequest, { params }: Params) {
     }
     doc.moveDown();
 
-    doc.fontSize(16).font("Helvetica-Bold").text("Ventas por pedido");
+    // Ventas
+    doc.font("Helvetica-Bold").fontSize(16).text("Ventas por pedido");
     doc.moveDown(0.5);
 
-    if (cashRegister.sales.length === 0) {
-      doc.fontSize(11).font("Helvetica").text("No hubo ventas confirmadas en esta caja.");
+    if (!cashRegister.sales.length) {
+      doc.font("Helvetica").fontSize(11).text("No hubo ventas confirmadas en esta caja.");
     } else {
       cashRegister.sales.forEach((sale, index) => {
-        doc
-          .fontSize(11)
-          .font("Helvetica-Bold")
-          .text(
-            `${index + 1}. Pedido ${fmtOrder(sale.order.dailyOrderNumber)} - ${sale.order.customer.name}`
-          );
+        const orderNumber = fmtOrder(sale.order?.dailyOrderNumber ?? null);
+        const customerName = sale.order?.customer?.name || "Cliente sin nombre";
+        const total = num(sale.total);
+        const paymentMethod = sale.paymentMethod || "-";
+
+        doc.font("Helvetica-Bold").fontSize(11).text(
+          `${index + 1}. Pedido ${orderNumber} - ${customerName}`
+        );
         doc.font("Helvetica");
         doc.text(`Fecha: ${formatDate(sale.createdAt)}`);
-        doc.text(`Medio de pago: ${sale.paymentMethod}`);
-        doc.text(`Total: ${money(Number(sale.total || 0))}`);
+        doc.text(`Medio de pago: ${paymentMethod}`);
+        doc.text(`Total: ${money(total)}`);
         doc.moveDown(0.4);
       });
     }
 
     doc.moveDown();
 
-    doc.fontSize(16).font("Helvetica-Bold").text("Movimientos de caja");
+    // Movimientos
+    doc.font("Helvetica-Bold").fontSize(16).text("Movimientos de caja");
     doc.moveDown(0.5);
 
-    if (cashRegister.movements.length === 0) {
-      doc.fontSize(11).font("Helvetica").text("No hubo movimientos registrados.");
+    if (!cashRegister.movements.length) {
+      doc.font("Helvetica").fontSize(11).text("No hubo movimientos registrados.");
     } else {
       cashRegister.movements.forEach((movement, index) => {
-        doc
-          .fontSize(11)
-          .font("Helvetica-Bold")
-          .text(`${index + 1}. ${movement.type}`);
+        doc.font("Helvetica-Bold").fontSize(11).text(`${index + 1}. ${movement.type}`);
         doc.font("Helvetica");
         doc.text(`Fecha: ${formatDate(movement.createdAt)}`);
-        doc.text(`Monto: ${money(Number(movement.amount || 0))}`);
+        doc.text(`Monto: ${money(num(movement.amount))}`);
         doc.text(`Descripción: ${movement.description || "-"}`);
         doc.text(`Método: ${movement.method || "-"}`);
         doc.moveDown(0.4);
@@ -191,21 +220,21 @@ export async function GET(_: NextRequest, { params }: Params) {
     }
 
     doc.moveDown();
-    doc.fontSize(10).font("Helvetica-Oblique");
+    doc.font("Helvetica-Oblique").fontSize(10);
     doc.text("Documento generado automáticamente por el sistema de gestión.", {
       align: "center",
     });
 
     doc.end();
 
-    const pdfBuffer = await pdfReady;
-    const pdfBytes = new Uint8Array(pdfBuffer);
+    const pdfBytes = await pdfReady;
 
     return new Response(pdfBytes, {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="cierre-caja-${cashRegister.id}.pdf"`,
+        "Cache-Control": "no-store",
       },
     });
   } catch (error) {
