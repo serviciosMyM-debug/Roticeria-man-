@@ -135,20 +135,22 @@ export async function GET(_: NextRequest, { params }: Params) {
       doc.on("error", reject);
     });
 
-    doc.font("Helvetica-Bold").fontSize(22).text("Resumen de cierre de caja");
+    // Encabezado
+    doc.fontSize(22).text("Resumen de cierre de caja");
     doc.moveDown(0.3);
 
-    doc.font("Helvetica").fontSize(12);
+    doc.fontSize(12);
     doc.text(`ID de caja: ${cashRegister.id}`);
     doc.text(`Apertura: ${formatDate(cashRegister.openedAt)}`);
     doc.text(`Cierre: ${formatDate(cashRegister.closedAt)}`);
     doc.text(`Observación: ${cashRegister.notes || "-"}`);
     doc.moveDown();
 
-    doc.font("Helvetica-Bold").fontSize(16).text("Resumen general");
+    // Resumen general
+    doc.fontSize(16).text("Resumen general");
     doc.moveDown(0.5);
 
-    doc.font("Helvetica").fontSize(11);
+    doc.fontSize(11);
     doc.text(`Monto inicial: ${money(summary.initialAmount)}`);
     doc.text(`Ventas confirmadas: ${money(summary.ventas)}`);
     doc.text(`Ingresos manuales: ${money(summary.ingresos)}`);
@@ -158,10 +160,11 @@ export async function GET(_: NextRequest, { params }: Params) {
     doc.text(`Diferencia: ${money(summary.difference)}`);
     doc.moveDown();
 
-    doc.font("Helvetica-Bold").fontSize(16).text("Lectura del cierre");
+    // Lectura
+    doc.fontSize(16).text("Lectura del cierre");
     doc.moveDown(0.5);
 
-    doc.font("Helvetica").fontSize(11);
+    doc.fontSize(11);
     if (summary.difference === 0) {
       doc.text("La caja cerró exacta. No hubo diferencia entre lo esperado y lo contado.");
     } else if (summary.difference > 0) {
@@ -171,11 +174,12 @@ export async function GET(_: NextRequest, { params }: Params) {
     }
     doc.moveDown();
 
-    doc.font("Helvetica-Bold").fontSize(16).text("Ventas por pedido");
+    // Ventas
+    doc.fontSize(16).text("Ventas por pedido");
     doc.moveDown(0.5);
 
     if (!cashRegister.sales.length) {
-      doc.font("Helvetica").fontSize(11).text("No hubo ventas confirmadas en esta caja.");
+      doc.fontSize(11).text("No hubo ventas confirmadas en esta caja.");
     } else {
       cashRegister.sales.forEach((sale, index) => {
         const orderNumber = fmtOrder(sale.order?.dailyOrderNumber ?? null);
@@ -183,11 +187,7 @@ export async function GET(_: NextRequest, { params }: Params) {
         const total = num(sale.total);
         const paymentMethod = sale.paymentMethod || "-";
 
-        doc
-          .font("Helvetica-Bold")
-          .fontSize(11)
-          .text(`${index + 1}. Pedido ${orderNumber} - ${customerName}`);
-        doc.font("Helvetica");
+        doc.fontSize(11).text(`${index + 1}. Pedido ${orderNumber} - ${customerName}`);
         doc.text(`Fecha: ${formatDate(sale.createdAt)}`);
         doc.text(`Medio de pago: ${paymentMethod}`);
         doc.text(`Total: ${money(total)}`);
@@ -197,15 +197,15 @@ export async function GET(_: NextRequest, { params }: Params) {
 
     doc.moveDown();
 
-    doc.font("Helvetica-Bold").fontSize(16).text("Movimientos de caja");
+    // Movimientos
+    doc.fontSize(16).text("Movimientos de caja");
     doc.moveDown(0.5);
 
     if (!cashRegister.movements.length) {
-      doc.font("Helvetica").fontSize(11).text("No hubo movimientos registrados.");
+      doc.fontSize(11).text("No hubo movimientos registrados.");
     } else {
       cashRegister.movements.forEach((movement, index) => {
-        doc.font("Helvetica-Bold").fontSize(11).text(`${index + 1}. ${movement.type}`);
-        doc.font("Helvetica");
+        doc.fontSize(11).text(`${index + 1}. ${movement.type}`);
         doc.text(`Fecha: ${formatDate(movement.createdAt)}`);
         doc.text(`Monto: ${money(num(movement.amount))}`);
         doc.text(`Descripción: ${movement.description || "-"}`);
@@ -215,7 +215,7 @@ export async function GET(_: NextRequest, { params }: Params) {
     }
 
     doc.moveDown();
-    doc.font("Helvetica-Oblique").fontSize(10);
+    doc.fontSize(10);
     doc.text("Documento generado automáticamente por el sistema de gestión.", {
       align: "center",
     });
