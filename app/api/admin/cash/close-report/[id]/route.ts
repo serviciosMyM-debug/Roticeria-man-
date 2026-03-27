@@ -106,7 +106,7 @@ export async function GET(_: NextRequest, { params }: Params) {
       },
     });
 
-    const chunks: Buffer[] = [];
+    const chunks: Uint8Array[] = [];
     doc.on("data", (chunk) => chunks.push(chunk));
 
     const pdfReady = new Promise<Buffer>((resolve, reject) => {
@@ -199,8 +199,9 @@ export async function GET(_: NextRequest, { params }: Params) {
     doc.end();
 
     const pdfBuffer = await pdfReady;
+    const pdfBytes = new Uint8Array(pdfBuffer);
 
-    return new Response(pdfBuffer, {
+    return new Response(pdfBytes, {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
