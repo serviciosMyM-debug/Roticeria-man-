@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import PDFDocument from "pdfkit";
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -66,6 +66,26 @@ function calcSummary(cashRegister: {
   };
 }
 
+function wrapText(text: string, maxLength = 95) {
+  if (!text) return ["-"];
+  const words = text.split(" ");
+  const lines: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length > maxLength) {
+      if (current) lines.push(current);
+      current = word;
+    } else {
+      current = next;
+    }
+  }
+
+  if (current) lines.push(current);
+  return lines.length ? lines : ["-"];
+}
+
 export async function GET(_: NextRequest, { params }: Params) {
   try {
     const { id } = await params;
@@ -112,74 +132,69 @@ export async function GET(_: NextRequest, { params }: Params) {
       })),
     });
 
-    const doc = new PDFDocument({
-      size: "A4",
-      margin: 40,
-      info: {
-        Title: `Cierre de caja ${formatDate(cashRegister.closedAt)}`,
-        Author: "Sistema Mana",
-      },
-    });
+    const pdfDoc = await PDFDocument.create();
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-    const chunks: Buffer[] = [];
+    let page = pdfDoc.addPage([595.28, 841.89]); // A4
+    const { width, height } = page.getSize();
+    const margin = 40;
+    let y = height - margin;
 
-    const pdfReady = new Promise<Buffer>((resolve, reject) => {
-      doc.on("data", (chunk: Buffer | Uint8Array) => {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    const line = (text: string, size = 11, isBold = false, gap = 16) => {
+      const activeFont = isBold ? bold : font;
+      if (y < 60) {
+        page = pdfDoc.addPage([595.28, 841.89]);
+        y = height - margin;
+      }
+      page.drawText(text, {
+        x: margin,
+        y,
+        size,
+        font: activeFont,
+        color: rgb(0, 0, 0),
       });
+      y -= gap;
+    };
 
-      doc.on("end", () => {
-        resolve(Buffer.concat(chunks));
-      });
+    const wrapped = (text: string, size = 11, isBold = false, gap = 14) => {
+      for (const item of wrapText(text)) {
+        line(item, size, isBold, gap);
+      }
+    };
 
-      doc.on("error", reject);
-    });
+    line("Resumen de cierre de caja", 22, true, 24);
+    y -= 4;
 
-    // Encabezado
-    doc.fontSize(22).text("Resumen de cierre de caja");
-    doc.moveDown(0.3);
+    line(`ID de caja: ${cashRegister.id}`);
+    line(`Apertura: ${formatDate(cashRegister.openedAt)}`);
+    line(`Cierre: ${formatDate(cashRegister.closedAt)}`);
+    wrapped(`Observación: ${cashRegister.notes || "-"}`);
+    y -= 8;
 
-    doc.fontSize(12);
-    doc.text(`ID de caja: ${cashRegister.id}`);
-    doc.text(`Apertura: ${formatDate(cashRegister.openedAt)}`);
-    doc.text(`Cierre: ${formatDate(cashRegister.closedAt)}`);
-    doc.text(`Observación: ${cashRegister.notes || "-"}`);
-    doc.moveDown();
+    line("Resumen general", 16, true, 20);
+    line(`Monto inicial: ${money(summary.initialAmount)}`);
+    line(`Ventas confirmadas: ${money(summary.ventas)}`);
+    line(`Ingresos manuales: ${money(summary.ingresos)}`);
+    line(`Egresos manuales: ${money(summary.egresos)}`);
+    line(`Total esperado: ${money(summary.expectedAmount)}`);
+    line(`Total contado: ${money(summary.finalAmount)}`);
+    line(`Diferencia: ${money(summary.difference)}`);
+    y -= 8;
 
-    // Resumen general
-    doc.fontSize(16).text("Resumen general");
-    doc.moveDown(0.5);
-
-    doc.fontSize(11);
-    doc.text(`Monto inicial: ${money(summary.initialAmount)}`);
-    doc.text(`Ventas confirmadas: ${money(summary.ventas)}`);
-    doc.text(`Ingresos manuales: ${money(summary.ingresos)}`);
-    doc.text(`Egresos manuales: ${money(summary.egresos)}`);
-    doc.text(`Total esperado: ${money(summary.expectedAmount)}`);
-    doc.text(`Total contado: ${money(summary.finalAmount)}`);
-    doc.text(`Diferencia: ${money(summary.difference)}`);
-    doc.moveDown();
-
-    // Lectura
-    doc.fontSize(16).text("Lectura del cierre");
-    doc.moveDown(0.5);
-
-    doc.fontSize(11);
+    line("Lectura del cierre", 16, true, 20);
     if (summary.difference === 0) {
-      doc.text("La caja cerró exacta. No hubo diferencia entre lo esperado y lo contado.");
+      wrapped("La caja cerró exacta. No hubo diferencia entre lo esperado y lo contado.");
     } else if (summary.difference > 0) {
-      doc.text("La caja cerró con sobrante. El dinero contado fue mayor al esperado.");
+      wrapped("La caja cerró con sobrante. El dinero contado fue mayor al esperado.");
     } else {
-      doc.text("La caja cerró con faltante. El dinero contado fue menor al esperado.");
+      wrapped("La caja cerró con faltante. El dinero contado fue menor al esperado.");
     }
-    doc.moveDown();
+    y -= 8;
 
-    // Ventas
-    doc.fontSize(16).text("Ventas por pedido");
-    doc.moveDown(0.5);
-
+    line("Ventas por pedido", 16, true, 20);
     if (!cashRegister.sales.length) {
-      doc.fontSize(11).text("No hubo ventas confirmadas en esta caja.");
+      line("No hubo ventas confirmadas en esta caja.");
     } else {
       cashRegister.sales.forEach((sale, index) => {
         const orderNumber = fmtOrder(sale.order?.dailyOrderNumber ?? null);
@@ -187,44 +202,44 @@ export async function GET(_: NextRequest, { params }: Params) {
         const total = num(sale.total);
         const paymentMethod = sale.paymentMethod || "-";
 
-        doc.fontSize(11).text(`${index + 1}. Pedido ${orderNumber} - ${customerName}`);
-        doc.text(`Fecha: ${formatDate(sale.createdAt)}`);
-        doc.text(`Medio de pago: ${paymentMethod}`);
-        doc.text(`Total: ${money(total)}`);
-        doc.moveDown(0.4);
+        line(`${index + 1}. Pedido ${orderNumber} - ${customerName}`, 11, true);
+        line(`Fecha: ${formatDate(sale.createdAt)}`);
+        line(`Medio de pago: ${paymentMethod}`);
+        line(`Total: ${money(total)}`);
+        y -= 4;
       });
     }
 
-    doc.moveDown();
-
-    // Movimientos
-    doc.fontSize(16).text("Movimientos de caja");
-    doc.moveDown(0.5);
-
+    y -= 8;
+    line("Movimientos de caja", 16, true, 20);
     if (!cashRegister.movements.length) {
-      doc.fontSize(11).text("No hubo movimientos registrados.");
+      line("No hubo movimientos registrados.");
     } else {
       cashRegister.movements.forEach((movement, index) => {
-        doc.fontSize(11).text(`${index + 1}. ${movement.type}`);
-        doc.text(`Fecha: ${formatDate(movement.createdAt)}`);
-        doc.text(`Monto: ${money(num(movement.amount))}`);
-        doc.text(`Descripción: ${movement.description || "-"}`);
-        doc.text(`Método: ${movement.method || "-"}`);
-        doc.moveDown(0.4);
+        line(`${index + 1}. ${movement.type}`, 11, true);
+        line(`Fecha: ${formatDate(movement.createdAt)}`);
+        line(`Monto: ${money(num(movement.amount))}`);
+        wrapped(`Descripción: ${movement.description || "-"}`);
+        line(`Método: ${movement.method || "-"}`);
+        y -= 4;
       });
     }
 
-    doc.moveDown();
-    doc.fontSize(10);
-    doc.text("Documento generado automáticamente por el sistema de gestión.", {
-      align: "center",
+    if (y < 60) {
+      page = pdfDoc.addPage([595.28, 841.89]);
+      y = height - margin;
+    }
+    page.drawText("Documento generado automáticamente por el sistema de gestión.", {
+      x: margin,
+      y: 30,
+      size: 10,
+      font,
+      color: rgb(0.2, 0.2, 0.2),
     });
 
-    doc.end();
+    const pdfBytes = await pdfDoc.save();
 
-    const pdfBuffer = await pdfReady;
-
-    return new Response(pdfBuffer as unknown as BodyInit, {
+    return new Response(pdfBytes as unknown as BodyInit, {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
