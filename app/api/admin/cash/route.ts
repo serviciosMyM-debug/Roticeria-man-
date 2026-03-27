@@ -16,141 +16,195 @@ function formatOrderNumber(value?: number | null) {
   return String(value).padStart(3, "0");
 }
 
-export async function GET() {
-  try {
-    const currentCash = await prisma.cashRegister.findFirst({
-      where: {
-        isOpen: true,
-      },
-      orderBy: {
-        openedAt: "desc",
-      },
-      include: {
-        movements: {
-          orderBy: {
-            createdAt: "desc",
-          },
-        },
-        sales: {
-          orderBy: {
-            createdAt: "desc",
-          },
-          include: {
-            order: {
-              select: {
-                id: true,
-                dailyOrderNumber: true,
-                customer: {
-                  select: {
-                    name: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    });
+function buildSummary(cashRegister: {
+  initialAmount: any;
+  finalAmount?: any;
+  expectedAmount?: any;
+  difference?: any;
+  movements: Array<{ type: CashMovementType | string; amount: any }>;
+} | null) {
+  if (!cashRegister) {
+    return {
+      initialAmount: 0,
+      ingresos: 0,
+      egresos: 0,
+      ventas: 0,
+      expectedAmount: 0,
+      finalAmount: 0,
+      difference: 0,
+    };
+  }
 
-    const lastClosedCash = await prisma.cashRegister.findFirst({
-      where: {
-        isOpen: false,
-      },
-      orderBy: {
-        closedAt: "desc",
-      },
-      include: {
-        movements: {
-          orderBy: {
-            createdAt: "desc",
-          },
-        },
-        sales: {
-          orderBy: {
-            createdAt: "desc",
-          },
-          include: {
-            order: {
-              select: {
-                id: true,
-                dailyOrderNumber: true,
-                customer: {
-                  select: {
-                    name: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    });
+  const initialAmount = Number(cashRegister.initialAmount || 0);
 
-    function buildSummary(cashRegister: typeof currentCash | typeof lastClosedCash | null) {
-      if (!cashRegister) {
-        return {
-          initialAmount: 0,
-          ingresos: 0,
-          egresos: 0,
-          ventas: 0,
-          expectedAmount: 0,
-          finalAmount: 0,
-          difference: 0,
-        };
-      }
+  const ventas = cashRegister.movements
+    .filter((m) => m.type === CashMovementType.SALE)
+    .reduce((acc, m) => acc + Number(m.amount || 0), 0);
 
-      const initialAmount = Number(cashRegister.initialAmount);
+  const ingresos = cashRegister.movements
+    .filter((m) => m.type === CashMovementType.INCOME)
+    .reduce((acc, m) => acc + Number(m.amount || 0), 0);
 
-      const ventas = cashRegister.movements
-        .filter((m) => m.type === CashMovementType.SALE)
-        .reduce((acc, m) => acc + Number(m.amount), 0);
+  const egresos = cashRegister.movements
+    .filter((m) => m.type === CashMovementType.EXPENSE)
+    .reduce((acc, m) => acc + Number(m.amount || 0), 0);
 
-      const ingresos = cashRegister.movements
-        .filter((m) => m.type === CashMovementType.INCOME)
-        .reduce((acc, m) => acc + Number(m.amount), 0);
+  const expectedAmount =
+    cashRegister.expectedAmount != null
+      ? Number(cashRegister.expectedAmount || 0)
+      : initialAmount + ventas + ingresos - egresos;
 
-      const egresos = cashRegister.movements
-        .filter((m) => m.type === CashMovementType.EXPENSE)
-        .reduce((acc, m) => acc + Number(m.amount), 0);
+  const finalAmount = Number(cashRegister.finalAmount || 0);
+  const difference =
+    cashRegister.difference != null
+      ? Number(cashRegister.difference || 0)
+      : finalAmount - expectedAmount;
 
-      const expectedAmount = initialAmount + ventas + ingresos - egresos;
-      const finalAmount = cashRegister.finalAmount ? Number(cashRegister.finalAmount) : 0;
-      const difference = cashRegister.difference ? Number(cashRegister.difference) : 0;
+  return {
+    initialAmount,
+    ingresos,
+    egresos,
+    ventas,
+    expectedAmount,
+    finalAmount,
+    difference,
+  };
+}
 
-      return {
-        initialAmount,
-        ingresos,
-        egresos,
-        ventas,
-        expectedAmount,
-        finalAmount,
-        difference,
-      };
-    }
+function serializeCash(cashRegister: any) {
+  if (!cashRegister) return null;
 
-    function serializeCash(cashRegister: typeof currentCash | typeof lastClosedCash | null) {
-      if (!cashRegister) return null;
-
-      return {
-        ...cashRegister,
-        sales: cashRegister.sales.map((sale) => ({
-          id: sale.id,
-          createdAt: sale.createdAt,
-          total: Number(sale.total),
-          paymentMethod: sale.paymentMethod,
-          order: {
+  return {
+    ...cashRegister,
+    sales: (cashRegister.sales || []).map((sale: any) => ({
+      id: sale.id,
+      createdAt: sale.createdAt,
+      total: Number(sale.total),
+      paymentMethod: sale.paymentMethod,
+      order: sale.order
+        ? {
             id: sale.order.id,
             dailyOrderNumber: sale.order.dailyOrderNumber,
             displayNumber: formatOrderNumber(sale.order.dailyOrderNumber),
-            customerName: sale.order.customer.name,
+            customerName: sale.order.customer?.name || "-",
+          }
+        : null,
+    })),
+    movements: (cashRegister.movements || []).map((m: any) => ({
+      ...m,
+      amount: Number(m.amount),
+    })),
+  };
+}
+
+function getDateKey(value?: Date | string | null) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+export async function GET(req: NextRequest) {
+  try {
+    const searchDate = req.nextUrl.searchParams.get("date");
+
+    const currentCash = await prisma.cashRegister.findFirst({
+      where: { isOpen: true },
+      orderBy: { openedAt: "desc" },
+      include: {
+        movements: {
+          orderBy: { createdAt: "desc" },
+        },
+        sales: {
+          orderBy: { createdAt: "desc" },
+          include: {
+            order: {
+              select: {
+                id: true,
+                dailyOrderNumber: true,
+                customer: {
+                  select: { name: true },
+                },
+              },
+            },
           },
-        })),
-        movements: cashRegister.movements.map((m) => ({
-          ...m,
-          amount: Number(m.amount),
-        })),
-      };
+        },
+      },
+    });
+
+    const closedCashRegisters = await prisma.cashRegister.findMany({
+      where: { isOpen: false },
+      orderBy: { closedAt: "desc" },
+      include: {
+        movements: {
+          orderBy: { createdAt: "desc" },
+        },
+        sales: {
+          orderBy: { createdAt: "desc" },
+          include: {
+            order: {
+              select: {
+                id: true,
+                dailyOrderNumber: true,
+                customer: {
+                  select: { name: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const lastClosedCash = closedCashRegisters[0] || null;
+
+    const cashHistory = closedCashRegisters.map((cashRegister) => ({
+      cashRegister: serializeCash(cashRegister),
+      summary: buildSummary(cashRegister),
+      dateKey: getDateKey(cashRegister.closedAt),
+    }));
+
+    const groupedByDayMap = new Map<string, any>();
+
+    for (const item of cashHistory) {
+      const key = item.dateKey || "sin-fecha";
+      if (!groupedByDayMap.has(key)) {
+        groupedByDayMap.set(key, {
+          dateKey: key,
+          closures: [],
+          aggregate: {
+            initialAmount: 0,
+            ingresos: 0,
+            egresos: 0,
+            ventas: 0,
+            expectedAmount: 0,
+            finalAmount: 0,
+            difference: 0,
+          },
+        });
+      }
+
+      const group = groupedByDayMap.get(key);
+      group.closures.push(item);
+      group.aggregate.initialAmount += item.summary.initialAmount;
+      group.aggregate.ingresos += item.summary.ingresos;
+      group.aggregate.egresos += item.summary.egresos;
+      group.aggregate.ventas += item.summary.ventas;
+      group.aggregate.expectedAmount += item.summary.expectedAmount;
+      group.aggregate.finalAmount += item.summary.finalAmount;
+      group.aggregate.difference += item.summary.difference;
     }
+
+    const groupedByDay = Array.from(groupedByDayMap.values()).sort((a, b) =>
+      b.dateKey.localeCompare(a.dateKey)
+    );
+
+    const searchedDay = searchDate
+      ? groupedByDay.find((g) => g.dateKey === searchDate) || null
+      : null;
 
     return NextResponse.json({
       ok: true,
@@ -159,6 +213,9 @@ export async function GET() {
       summary: buildSummary(currentCash),
       lastClosedCash: serializeCash(lastClosedCash),
       lastClosedSummary: buildSummary(lastClosedCash),
+      cashHistory,
+      groupedByDay,
+      searchedDay,
     });
   } catch (error) {
     console.error("GET /api/admin/cash error:", error);
